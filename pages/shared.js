@@ -89,3 +89,4 @@ body{font-family:'Nunito',sans-serif;background:#e8f5ee;color:var(--ink);}
 @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 .fade-up{animation:fadeUp 0.32s ease;}
 `;
+export default function Shared() { return null; }
