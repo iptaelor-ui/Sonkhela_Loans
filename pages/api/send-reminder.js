@@ -21,7 +21,7 @@ export default async function handler(req, res) {
   const loan = loanRes.data;
   const biz = bizRes.data || {};
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: "Email service not configured. Add RESEND_API_KEY to Vercel environment variables." });
+  if (!apiKey) return res.status(500).json({ error: "Add RESEND_API_KEY to Vercel environment variables." });
 
   const { Resend } = await import("resend");
   const resend = new Resend(apiKey);
@@ -37,24 +37,12 @@ export default async function handler(req, res) {
     html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f4fbf6;padding:2rem;border-radius:12px;">
       <div style="background:#145f39;padding:1.5rem 2rem;border-radius:8px;margin-bottom:1.5rem;">
         <h1 style="color:#fff;font-size:1.4rem;margin:0;">${biz.name || "Sonkhela Soft Loans"}</h1>
-        <p style="color:rgba(255,255,255,0.6);margin:4px 0 0;font-size:0.85rem;">${biz.tagline || ""}</p>
       </div>
-      <h2 style="color:#0d1f14;font-size:1.1rem;">Dear ${loan.client_name},</h2>
-      <p style="color:#4a5a50;line-height:1.7;">This is a friendly reminder that your loan <strong>${loan.id}</strong> is due on <strong style="color:#c0392b;">${dueDate}</strong>.</p>
-      <div style="background:#fff;border:1px solid #d4e8db;border-radius:8px;padding:1.25rem;margin:1.5rem 0;">
-        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
-          <tr><td style="padding:6px 0;color:#6b7c72;">Principal</td><td style="text-align:right;font-weight:700;">${fmtK(loan.amount)}</td></tr>
-          <tr><td style="padding:6px 0;color:#6b7c72;">Interest (${loan.interest_rate}%)</td><td style="text-align:right;font-weight:700;">${fmtK(loan.amount * loan.interest_rate / 100)}</td></tr>
-          <tr style="border-top:2px solid #d4e8db;">
-            <td style="padding:10px 0 6px;color:#145f39;font-weight:800;font-size:1rem;">Total Due</td>
-            <td style="text-align:right;font-weight:800;font-size:1rem;color:#145f39;">${fmtK(total)}</td>
-          </tr>
-        </table>
-      </div>
-      <p style="color:#4a5a50;line-height:1.7;">Please ensure payment is made on or before the due date to avoid penalties or forfeiture of your collateral.</p>
-      <p style="color:#4a5a50;">For queries, contact us at <strong>${biz.phone || ""}</strong>.</p>
-      <p style="color:#4a5a50;margin-top:1.5rem;">Regards,<br/><strong>${biz.name || "Sonkhela Soft Loans"}</strong></p>
-      <p style="font-size:0.72rem;color:#a0b0a8;margin-top:2rem;border-top:1px solid #d4e8db;padding-top:1rem;">Automated reminder. ${biz.address || ""}</p>
+      <h2 style="color:#0d1f14;">Dear ${loan.client_name},</h2>
+      <p style="color:#4a5a50;">Your loan <strong>${loan.id}</strong> is due on <strong style="color:#c0392b;">${dueDate}</strong>.</p>
+      <p style="color:#4a5a50;">Total due: <strong>${fmtK(total)}</strong></p>
+      <p style="color:#4a5a50;">Contact us: <strong>${biz.phone || ""}</strong></p>
+      <p style="color:#4a5a50;">Regards,<br/><strong>${biz.name || "Sonkhela Soft Loans"}</strong></p>
     </div>`,
   });
 
