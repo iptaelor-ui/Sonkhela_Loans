@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import nodemailer from "nodemailer";
 
 const supabase = createClient(
   "https://zxxdvxzgqynkuveipxqc.supabase.co",
@@ -20,32 +21,46 @@ export default async function handler(req, res) {
 
   const loan = loanRes.data;
   const biz = bizRes.data || {};
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: "Add RESEND_API_KEY to Vercel environment variables." });
 
-  const { Resend } = await import("resend");
-  const resend = new Resend(apiKey);
+  const gmailUser = process.env.GMAIL_USER;
+  const gmailPass = process.env.GMAIL_PASS;
+  if (!gmailUser || !gmailPass) return res.status(500).json({ error: "Add GMAIL_USER and GMAIL_PASS to Vercel environment variables." });
+
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: { user: gmailUser, pass: gmailPass },
+  });
 
   const dueDate = new Date(loan.due_date + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
   const total = Number(loan.amount) + (Number(loan.amount) * Number(loan.interest_rate) / 100);
   const fmtK = (n) => "K " + Number(n).toLocaleString("en", { minimumFractionDigits: 2 });
 
-  const { error } = await resend.emails.send({
-    from: `${biz.name || "Sonkhela"} <onboarding@resend.dev>`,
+  await transporter.sendMail({
+    from: `${biz.name || "Sonkhela Soft Loans"} <${gmailUser}>`,
     to: loan.client_email,
     subject: `Loan Payment Reminder – Due ${dueDate}`,
     html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f4fbf6;padding:2rem;border-radius:12px;">
       <div style="background:#145f39;padding:1.5rem 2rem;border-radius:8px;margin-bottom:1.5rem;">
         <h1 style="color:#fff;font-size:1.4rem;margin:0;">${biz.name || "Sonkhela Soft Loans"}</h1>
+        <p style="color:rgba(255,255,255,0.6);margin:4px 0 0;">${biz.tagline || ""}</p>
       </div>
       <h2 style="color:#0d1f14;">Dear ${loan.client_name},</h2>
-      <p style="color:#4a5a50;">Your loan <strong>${loan.id}</strong> is due on <strong style="color:#c0392b;">${dueDate}</strong>.</p>
-      <p style="color:#4a5a50;">Total due: <strong>${fmtK(total)}</strong></p>
-      <p style="color:#4a5a50;">Contact us: <strong>${biz.phone || ""}</strong></p>
+      <p style="color:#4a5a50;line-height:1.7;">This is a friendly reminder that your loan <strong>${loan.id}</strong> is due on <strong style="color:#c0392b;">${dueDate}</strong>.</p>
+      <div style="background:#fff;border:1px solid #d4e8db;border-radius:8px;padding:1.25rem;margin:1.5rem 0;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+          <tr><td style="padding:6px 0;color:#6b7c72;">Principal</td><td style="text-align:right;font-weight:700;">${fmtK(loan.amount)}</td></tr>
+          <tr><td style="padding:6px 0;color:#6b7c72;">Interest (${loan.interest_rate}%)</td><td style="text-align:right;font-weight:700;">${fmtK(loan.amount * loan.interest_rate / 100)}</td></tr>
+          <tr style="border-top:2px solid #d4e8db;">
+            <td style="padding:10px 0 6px;color:#145f39;font-weight:800;">Total Due</td>
+            <td style="text-align:right;font-weight:800;color:#145f39;">${fmtK(total)}</td>
+          </tr>
+        </table>
+      </div>
+      <p style="color:#4a5a50;">Please pay on or before the due date to avoid penalties.</p>
+      <p style="color:#4a5a50;">Contact: <strong>${biz.phone || ""}</strong></p>
       <p style="color:#4a5a50;">Regards,<br/><strong>${biz.name || "Sonkhela Soft Loans"}</strong></p>
     </div>`,
   });
 
-  if (error) return res.status(500).json({ error: error.message });
   return res.status(200).json({ success: true });
 }
