@@ -445,7 +445,7 @@ function LoanModal({ loan, onClose, onSave, saving }) {
     processing_date: new Date().toISOString().slice(0,10),
     due_date:"", repayment:"monthly", collateral:"", collateral_value:"",
     status:"active",
-    terms:"The borrower agrees to repay the full loan amount plus interest by the due date. The collateral will be held by the lender until full repayment. Failure to repay by the due date may result in forfeiture of the stated collateral.",
+    terms:"Collateral Ownership: If the borrower fails to pay any installment on the due date an extra two days shall be given to the borrower to clear up the balance. Failure to that, the borrower loses ownership of the collateral unless they renew the contract",
   };
   const [f, setF] = useState(loan || blank);
   const set = (k,v) => setF(p => ({...p,[k]:v}));
