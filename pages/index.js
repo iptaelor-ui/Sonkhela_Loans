@@ -324,10 +324,27 @@ function ClientsPage({ loans, setLoans, showToast, business }) {
     showToast("Agreement deleted.");
   };
 
-  const updateStatus = async (id, status) => {
+    const updateStatus = async (id, status) => {
     const { error } = await supabase.from("loans").update({ status }).eq("id", id);
-    if (error) { showToast("Failed to update.", "error"); return; }
-    setLoans(p => p.map(l => l.id===id ? {...l,status} : l));
+    if (error) { showToast("Failed to update status.", "error"); return; }
+    setLoans((p) => p.map((l) => l.id === id ? { ...l, status } : l));
+    if (status === "settled") {
+      const loan = loans.find((l) => l.id === id);
+      if (loan) {
+        const interest = Number(loan.amount) * Number(loan.interest_rate) / 100;
+        const total = Number(loan.amount) + interest;
+        try {
+          await fetch("/api/log-settled", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...loan, interest, total }),
+          });
+          showToast("✓ Settled & saved to Google Sheets!");
+        } catch (e) {
+          showToast("Settled but Google Sheets log failed.", "error");
+        }
+      }
+    }
   };
 
   const handleSave = async (data) => {
