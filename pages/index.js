@@ -222,9 +222,10 @@ function CopyLinkBtn({ loanId, showToast }) {
 }
 
 function Dashboard({ loans, setActivePage, showToast }) {
-  const totalIssued   = loans.reduce((s,l) => s+Number(l.amount), 0);
-  const totalInterest = loans.reduce((s,l) => s+(Number(l.amount)*Number(l.interest_rate||0)/100), 0);
-  const salary        = totalInterest * 0.30;
+  const activeLoans = loans.filter((l) => l.status !== "settled");
+  const totalIssued = activeLoans.reduce((s, l) => s + Number(l.amount), 0);
+  const totalInterest = activeLoans.reduce((s, l) => s + (Number(l.amount) * Number(l.interest_rate) / 100), 0);
+  const salary = totalInterest * 0.30;
   const active  = loans.filter(l => l.status==="active" && !isOverdue(l)).length;
   const overdue = loans.filter(isOverdue).length;
   const settled = loans.filter(l => l.status==="settled").length;
