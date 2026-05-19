@@ -420,7 +420,7 @@ function ClientsPage({ loans, setLoans, settled, setSettled, showToast, business
           <table>
             <thead><tr><th>Loan ID</th><th>Client</th><th>Amount</th><th>Due Date</th><th>Collateral</th><th>Status</th><th>Link</th><th>Actions</th></tr></thead>
             <tbody>
-              {filtered.length===0 && <tr><td colSpan={8} style={{textAlign:"center",color:"#6b7c72",padding:"2.5rem"}}>No agreements found.</td></tr>}
+              {filtered.length===0 && <tr><td colSpan={9} style={{textAlign:"center",color:"#6b7c72",padding:"2.5rem"}}>No agreements found.</td></tr>}
               {filtered.map(loan => {
                 const over = isOverdue(loan);
                 const dueSoon = !over && loan.status==="active" && new Date(loan.due_date+"T00:00:00") <= new Date(Date.now()+3*86400000);
@@ -530,7 +530,7 @@ function LoanModal({ loan, onClose, onSave, saving }) {
   );
 }
 
-function RecordsPage({ settled, showToast }) {
+function RecordsPage({ settled, setSettled, showToast }) {
   const [search, setSearch] = useState("");
   const filtered = settled.filter((l) =>
     ((l.client_name || "") + l.id).toLowerCase().includes(search.toLowerCase())
@@ -587,7 +587,7 @@ function RecordsPage({ settled, showToast }) {
         </div>
         <div className="tbl-wrap">
           <table>
-            <thead><tr><th>Loan ID</th><th>Client</th><th>Principal</th><th>Interest</th><th>Total Repaid</th><th>Collateral</th><th>Settled Date</th></tr></thead>
+            <thead><tr><th>Loan ID</th><th>Client</th><th>Principal</th><th>Interest</th><th>Total Repaid</th><th>Collateral</th><th>Settled Date</th><th>Agreement</th><th>Action</th></tr></thead>
             <tbody>
               {filtered.length===0 && <tr><td colSpan={7} style={{textAlign:"center",color:"#6b7c72",padding:"2.5rem"}}>
                 No settled loans yet. Mark a loan as Settled and it will appear here.
@@ -605,6 +605,21 @@ function RecordsPage({ settled, showToast }) {
                   <td style={{fontSize:"0.78rem",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{loan.collateral}</td>
                   <td style={{fontSize:"0.78rem",color:"#6b7c72"}}>
                     {loan.settled_at ? new Date(loan.settled_at).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "—"}
+                  </td>
+                  <td>
+                    <button className="btn btn-link btn-xs" onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/agreement/${loan.id}`);
+                      showToast("✓ Link copied!");
+                    }}>🔗 Copy Link</button>
+                  </td>
+                  <td>
+                    <button className="btn btn-red btn-xs" onClick={async () => {
+                      if (!confirm("Delete this settled record permanently?")) return;
+                      const { error } = await supabase.from("settled_loans").delete().eq("id", loan.id);
+                      if (error) { showToast("Failed to delete.", "error"); return; }
+                      setSettled(p => p.filter(r => r.id !== loan.id));
+                      showToast("Record deleted.");
+                    }}>✕ Delete</button>
                   </td>
                 </tr>
               ))}
