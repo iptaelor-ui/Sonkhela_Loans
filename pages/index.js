@@ -115,6 +115,7 @@ export default function App() {
   const [activePage, setActivePage] = useState("dashboard");
   const [business, setBusiness] = useState(null);
   const [loans, setLoans] = useState([]);
+  const [settled, setSettled] = useState([]);
   const [toast, setToast] = useState({ msg: "", type: "ok" });
 
   const showToast = (msg, type = "ok") => {
@@ -131,8 +132,12 @@ export default function App() {
   };
 
   const loadLoans = async () => {
-    const { data } = await supabase.from("loans").select("*").order("created_at", { ascending: false });
-    if (data) setLoans(data);
+    const [loansRes, settledRes] = await Promise.all([
+      supabase.from("loans").select("*").order("created_at", { ascending: false }),
+      supabase.from("settled_loans").select("*").order("settled_at", { ascending: false }),
+    ]);
+    if (loansRes.data) setLoans(loansRes.data);
+    if (settledRes.data) setSettled(settledRes.data);
   };
 
   const handlePinKey = (k) => {
@@ -187,7 +192,12 @@ export default function App() {
           <div className="brand-tag">{business?.tagline}</div>
         </div>
         <nav className="sidebar-nav">
-          {[{id:"dashboard",icon:"📊",label:"Dashboard"},{id:"clients",icon:"👥",label:"Clients"},{id:"settings",icon:"⚙️",label:"Settings"}].map(item => (
+          {[
+            {id:"dashboard",icon:"📊",label:"Dashboard"},
+            {id:"clients",icon:"👥",label:"Clients"},
+            {id:"records",icon:"📁",label:"Records"},
+            {id:"settings",icon:"⚙️",label:"Settings"}
+          ].map(item => (
             <button key={item.id} className={`nav-item ${activePage===item.id?"active":""}`} onClick={() => setActivePage(item.id)}>
               <span style={{width:20,textAlign:"center"}}>{item.icon}</span>{item.label}
             </button>
@@ -199,12 +209,15 @@ export default function App() {
       </aside>
       <div className="main">
         <div className="topbar">
-          <div className="topbar-title">{activePage==="dashboard"?"Dashboard":activePage==="clients"?"Clients":"Settings"}</div>
+          <div className="topbar-title">
+            {activePage==="dashboard"?"Dashboard":activePage==="clients"?"Clients":activePage==="records"?"Records":"Settings"}
+          </div>
           <div className="topbar-date">{new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
         </div>
         <div className="page fade-up" key={activePage}>
-          {activePage==="dashboard" && <Dashboard loans={loans} setActivePage={setActivePage} showToast={showToast}/>}
-          {activePage==="clients" && <ClientsPage loans={loans} setLoans={setLoans} showToast={showToast} business={business}/>}
+          {activePage==="dashboard" && <Dashboard loans={loans} settled={settled} setActivePage={setActivePage} showToast={showToast}/>}
+          {activePage==="clients" && <ClientsPage loans={loans} setLoans={setLoans} settled={settled} setSettled={setSettled} showToast={showToast} business={business}/>}
+          {activePage==="records" && <RecordsPage settled={settled} showToast={showToast}/>}
           {activePage==="settings" && <SettingsPage business={business} setBusiness={setBusiness} showToast={showToast}/>}
         </div>
       </div>
@@ -221,14 +234,14 @@ function CopyLinkBtn({ loanId, showToast }) {
   );
 }
 
-function Dashboard({ loans, setActivePage, showToast }) {
+function Dashboard({ loans, settled, setActivePage, showToast }) {
   const activeLoans = loans.filter((l) => l.status !== "settled");
   const totalIssued = activeLoans.reduce((s, l) => s + Number(l.amount), 0);
   const totalInterest = activeLoans.reduce((s, l) => s + (Number(l.amount) * Number(l.interest_rate) / 100), 0);
   const salary = totalInterest * 0.30;
   const active  = loans.filter(l => l.status==="active" && !isOverdue(l)).length;
   const overdue = loans.filter(isOverdue).length;
-  const settled = loans.filter(l => l.status==="settled").length;
+  const settledCount = settled.length;
 
   return (
     <>
@@ -240,12 +253,12 @@ function Dashboard({ loans, setActivePage, showToast }) {
         <div className="stat-card">
           <div className="stat-label">Total Issued</div>
           <div className="stat-value sm">{fmt(totalIssued)}</div>
-          <div className="stat-sub">{loans.length} agreement{loans.length!==1?"s":""}</div>
+          <div className="stat-sub">active & overdue only</div>
         </div>
         <div className="stat-card purple">
           <div className="stat-label">Total Interest Expected</div>
           <div className="stat-value sm">{fmt(totalInterest)}</div>
-          <div className="stat-sub">from all issued loans</div>
+          <div className="stat-sub">active & overdue only</div>
         </div>
         <div className="stat-card teal">
           <div className="stat-label">💼 Salary (30% of Interest)</div>
@@ -266,7 +279,7 @@ function Dashboard({ loans, setActivePage, showToast }) {
         </div>
         <div className="stat-card gray">
           <div className="stat-label">Settled</div>
-          <div className="stat-value">{settled}</div>
+          <div className="stat-value">{settledCount}</div>
           <div className="stat-sub">fully repaid</div>
         </div>
       </div>
@@ -301,7 +314,7 @@ function Dashboard({ loans, setActivePage, showToast }) {
   );
 }
 
-function ClientsPage({ loans, setLoans, showToast, business }) {
+function ClientsPage({ loans, setLoans, settled, setSettled, showToast, business }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
@@ -324,7 +337,7 @@ function ClientsPage({ loans, setLoans, showToast, business }) {
     showToast("Agreement deleted.");
   };
 
-    const updateStatus = async (id, status) => {
+  const updateStatus = async (id, status) => {
     const { error } = await supabase.from("loans").update({ status }).eq("id", id);
     if (error) { showToast("Failed to update status.", "error"); return; }
     setLoans((p) => p.map((l) => l.id === id ? { ...l, status } : l));
@@ -333,15 +346,20 @@ function ClientsPage({ loans, setLoans, showToast, business }) {
       if (loan) {
         const interest = Number(loan.amount) * Number(loan.interest_rate) / 100;
         const total = Number(loan.amount) + interest;
-        try {
-          await fetch("/api/log-settled", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...loan, interest, total }),
-          });
-          showToast("✓ Settled & saved to Google Sheets!");
-        } catch (e) {
-          showToast("Settled but Google Sheets log failed.", "error");
+        const record = {
+          id: loan.id, client_name: loan.client_name, client_phone: loan.client_phone,
+          client_nrc: loan.client_nrc, client_email: loan.client_email,
+          amount: loan.amount, interest_rate: loan.interest_rate, interest, total,
+          processing_date: loan.processing_date, due_date: loan.due_date,
+          repayment: loan.repayment, collateral: loan.collateral,
+          collateral_value: loan.collateral_value, terms: loan.terms,
+        };
+        const { error: sErr } = await supabase.from("settled_loans").insert(record);
+        if (!sErr) {
+          setSettled((p) => [{ ...record, settled_at: new Date().toISOString() }, ...p]);
+          showToast("✓ Loan settled & saved to Records!");
+        } else {
+          showToast("Settled but failed to save record.", "error");
         }
       }
     }
@@ -370,16 +388,11 @@ function ClientsPage({ loans, setLoans, showToast, business }) {
     try {
       const res = await fetch("/api/send-reminder", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          clientEmail: loan.client_email, clientName: loan.client_name,
-          loanId: loan.id, dueDate: loan.due_date,
-          amount: loan.amount, interestRate: loan.interest_rate,
-          businessName: business?.name, businessPhone: business?.phone, businessEmail: business?.email,
-        }),
+        body: JSON.stringify({ loanId: loan.id }),
       });
       const d = await res.json();
       if (d.success) showToast(`✉️ Reminder sent to ${loan.client_email}`);
-      else showToast("Email failed. Check Vercel env variables.", "error");
+      else showToast(d.error || "Email failed.", "error");
     } catch { showToast("Email service unavailable.", "error"); }
     setSendingEmail(null);
   };
@@ -437,7 +450,7 @@ function ClientsPage({ loans, setLoans, showToast, business }) {
                       <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                         <button className="btn btn-ghost btn-xs" onClick={() => { setEditTarget(loan); setShowModal(true); }}>Edit</button>
                         {loan.client_email && (
-                          <button className="btn btn-blue btn-xs" disabled={sendingEmail===loan.id} onClick={() => sendReminder(loan)} title={`Remind ${loan.client_email}`}>
+                          <button className="btn btn-blue btn-xs" disabled={sendingEmail===loan.id} onClick={() => sendReminder(loan)}>
                             {sendingEmail===loan.id?"...":"📧"}
                           </button>
                         )}
@@ -481,14 +494,14 @@ function LoanModal({ loan, onClose, onSave, saving }) {
             <div className="form-group"><label>Phone Number</label><input value={f.client_phone} onChange={e => set("client_phone",e.target.value)} placeholder="+260 97..."/></div>
             <div className="form-group"><label>NRC / National ID</label><input value={f.client_nrc} onChange={e => set("client_nrc",e.target.value)} placeholder="234567/10/1"/></div>
             <div className="form-group">
-              <label>Email <span style={{color:"#9ca3af",fontWeight:400,textTransform:"none",fontSize:"0.68rem"}}>(optional — for reminders)</span></label>
+              <label>Email <span style={{color:"#9ca3af",fontWeight:400,textTransform:"none",fontSize:"0.68rem"}}>(optional)</span></label>
               <input type="email" value={f.client_email||""} onChange={e => set("client_email",e.target.value)} placeholder="client@example.com"/>
             </div>
           </div>
           <p className="section-sub">💰 Loan Details</p>
           <div className="form-grid" style={{marginBottom:"1.25rem"}}>
-            <div className="form-group"><label>Loan Amount (K) *</label><input type="number" value={f.amount} onChange={e => set("amount",e.target.value)} placeholder="5000"/></div>
-            <div className="form-group"><label>Interest Rate (%)</label><input type="number" value={f.interest_rate} onChange={e => set("interest_rate",e.target.value)} placeholder="20"/></div>
+            <div className="form-group"><label>Loan Amount (K) *</label><input type="number" value={f.amount} onChange={e => set("amount",e.target.value)}/></div>
+            <div className="form-group"><label>Interest Rate (%)</label><input type="number" value={f.interest_rate} onChange={e => set("interest_rate",e.target.value)}/></div>
             <div className="form-group"><label>Processing Date</label><input type="date" value={f.processing_date} onChange={e => set("processing_date",e.target.value)}/></div>
             <div className="form-group"><label>Due Date *</label><input type="date" value={f.due_date} onChange={e => set("due_date",e.target.value)}/></div>
             <div className="form-group full"><label>Repayment Schedule</label>
@@ -499,8 +512,8 @@ function LoanModal({ loan, onClose, onSave, saving }) {
           </div>
           <p className="section-sub">🔒 Collateral</p>
           <div className="form-grid" style={{marginBottom:"1.25rem"}}>
-            <div className="form-group full"><label>Item / Description *</label><input value={f.collateral} onChange={e => set("collateral",e.target.value)} placeholder="e.g. Samsung TV – Serial No. XYZ123"/></div>
-            <div className="form-group"><label>Collateral Value (K)</label><input type="number" value={f.collateral_value} onChange={e => set("collateral_value",e.target.value)} placeholder="10000"/></div>
+            <div className="form-group full"><label>Item / Description *</label><input value={f.collateral} onChange={e => set("collateral",e.target.value)}/></div>
+            <div className="form-group"><label>Collateral Value (K)</label><input type="number" value={f.collateral_value} onChange={e => set("collateral_value",e.target.value)}/></div>
           </div>
           <p className="section-sub">📋 Terms & Conditions</p>
           <div className="form-group"><textarea value={f.terms} onChange={e => set("terms",e.target.value)} rows={4}/></div>
@@ -514,6 +527,92 @@ function LoanModal({ loan, onClose, onSave, saving }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function RecordsPage({ settled, showToast }) {
+  const [search, setSearch] = useState("");
+  const filtered = settled.filter((l) =>
+    ((l.client_name || "") + l.id).toLowerCase().includes(search.toLowerCase())
+  );
+  const totalAmount = settled.reduce((s, l) => s + Number(l.amount || 0), 0);
+  const totalInterest = settled.reduce((s, l) => s + Number(l.interest || 0), 0);
+  const totalRepaid = settled.reduce((s, l) => s + Number(l.total || 0), 0);
+
+  const exportCSV = () => {
+    const headers = ["Loan ID","Client Name","Phone","Amount","Interest Rate %","Interest","Total Repaid","Processing Date","Due Date","Repayment","Collateral","Settled Date"];
+    const rows = filtered.map((l) => [
+      l.id, l.client_name, l.client_phone||"", l.amount, l.interest_rate,
+      l.interest, l.total, l.processing_date, l.due_date, l.repayment,
+      l.collateral, l.settled_at ? new Date(l.settled_at).toLocaleDateString("en-GB") : "",
+    ]);
+    const csv = [headers,...rows].map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type:"text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href=url; a.download="Sonkhela_Settled_Records.csv"; a.click();
+    showToast("✓ CSV downloaded!");
+  };
+
+  return (
+    <>
+      <div style={{marginBottom:"1.75rem"}}>
+        <h1 style={{fontFamily:"'Lora',serif",fontSize:"1.6rem",fontWeight:700,marginBottom:4}}>📁 Settled Records</h1>
+        <p style={{color:"#6b7c72",fontSize:"0.875rem"}}>All fully repaid loan agreements — saved permanently.</p>
+      </div>
+      <div className="stats-row" style={{marginBottom:"2rem"}}>
+        <div className="stat-card gray">
+          <div className="stat-label">Total Settled</div>
+          <div className="stat-value">{settled.length}</div>
+          <div className="stat-sub">agreements</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Total Interest Collected</div>
+          <div className="stat-value sm">{fmt(totalInterest)}</div>
+          <div className="stat-sub">from settled loans</div>
+        </div>
+        <div className="stat-card teal">
+          <div className="stat-label">Total Amount Recovered</div>
+          <div className="stat-value sm">{fmt(totalRepaid)}</div>
+          <div className="stat-sub">principal + interest</div>
+        </div>
+      </div>
+      <div className="card">
+        <div className="card-head">
+          <div className="card-title">Settled Loan History</div>
+          <button className="btn btn-outline btn-sm" onClick={exportCSV}>⬇️ Export CSV</button>
+        </div>
+        <div style={{padding:"1rem 1.5rem",borderBottom:"1px solid #d4e8db"}}>
+          <input placeholder="🔍 Search by name or loan ID..." value={search} onChange={e => setSearch(e.target.value)} style={{width:"100%",maxWidth:400}}/>
+        </div>
+        <div className="tbl-wrap">
+          <table>
+            <thead><tr><th>Loan ID</th><th>Client</th><th>Principal</th><th>Interest</th><th>Total Repaid</th><th>Collateral</th><th>Settled Date</th></tr></thead>
+            <tbody>
+              {filtered.length===0 && <tr><td colSpan={7} style={{textAlign:"center",color:"#6b7c72",padding:"2.5rem"}}>
+                No settled loans yet. Mark a loan as Settled and it will appear here.
+              </td></tr>}
+              {filtered.map(loan => (
+                <tr key={loan.id}>
+                  <td style={{fontWeight:800,fontFamily:"'Lora',serif",fontSize:"0.82rem"}}>{loan.id}</td>
+                  <td>
+                    <div style={{fontWeight:700}}>{loan.client_name}</div>
+                    <div style={{fontSize:"0.72rem",color:"#6b7c72"}}>{loan.client_phone}</div>
+                  </td>
+                  <td style={{fontWeight:700}}>{fmt(loan.amount)}</td>
+                  <td style={{color:"#0891b2",fontWeight:700}}>{fmt(loan.interest)}</td>
+                  <td style={{fontWeight:800,color:"#145f39"}}>{fmt(loan.total)}</td>
+                  <td style={{fontSize:"0.78rem",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{loan.collateral}</td>
+                  <td style={{fontSize:"0.78rem",color:"#6b7c72"}}>
+                    {loan.settled_at ? new Date(loan.settled_at).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -555,7 +654,6 @@ function SettingsPage({ business, setBusiness, showToast }) {
               <div className="upload-area" onClick={() => document.getElementById("logoUpload").click()}>
                 {f.logo?<img className="upload-preview-round" src={f.logo} alt="logo"/>:<div style={{fontSize:"2rem",marginBottom:6}}>🏢</div>}
                 <div style={{fontSize:"0.78rem",color:"#6b7c72",fontWeight:700}}>Click to upload logo</div>
-                <div style={{fontSize:"0.68rem",color:"#6b7c72"}}>PNG or JPG, square preferred</div>
               </div>
               <input id="logoUpload" type="file" accept="image/*" style={{display:"none"}} onChange={e => uploadImage("logo",e)}/>
             </div>
@@ -570,9 +668,6 @@ function SettingsPage({ business, setBusiness, showToast }) {
           <div className="card">
             <div className="card-head"><div className="card-title">✍️ Your Signature</div></div>
             <div className="card-body">
-              <p style={{fontSize:"0.82rem",color:"#6b7c72",marginBottom:"1rem",lineHeight:1.65}}>
-                Upload a photo or scan of your signature. It will appear on every PDF agreement — only your signature will be shown, not the client's.
-              </p>
               <div className="upload-area" onClick={() => document.getElementById("sigUpload").click()}>
                 {f.signature?<img className="upload-preview" src={f.signature} alt="sig"/>:<div style={{fontSize:"2rem",marginBottom:6}}>✍️</div>}
                 <div style={{fontSize:"0.78rem",color:"#6b7c72",fontWeight:700}}>Click to upload signature</div>
@@ -583,28 +678,11 @@ function SettingsPage({ business, setBusiness, showToast }) {
             </div>
           </div>
           <div className="card">
-            <div className="card-head"><div className="card-title">📧 Email Reminders Setup</div></div>
-            <div className="card-body">
-              <p style={{fontSize:"0.82rem",color:"#6b7c72",lineHeight:1.7,marginBottom:"0.75rem"}}>
-                To send email reminders, add these to Vercel → Settings → Environment Variables, then redeploy:
-              </p>
-              <div style={{background:"#f0faf4",borderRadius:8,padding:"12px 14px",fontSize:"0.8rem",lineHeight:2.2,border:"1px solid #d4e8db"}}>
-                <div><code style={{fontWeight:800,color:"#145f39"}}>GMAIL_USER</code> = your Gmail address</div>
-                <div><code style={{fontWeight:800,color:"#145f39"}}>GMAIL_PASS</code> = your Gmail App Password</div>
-              </div>
-              <a href="https://support.google.com/accounts/answer/185833" target="_blank" rel="noreferrer"
-                style={{fontSize:"0.78rem",color:"#1a7a4a",fontWeight:800,display:"block",marginTop:"0.75rem"}}>
-                → How to create a Gmail App Password ↗
-              </a>
-            </div>
-          </div>
-          <div className="card">
             <div className="card-head"><div className="card-title">🔐 Security</div></div>
             <div className="card-body">
               <div className="form-group">
                 <label>Admin PIN</label>
                 <input type="password" maxLength={6} value={f.admin_pin||""} onChange={e => set("admin_pin",e.target.value)} placeholder="4–6 digits"/>
-                <span style={{fontSize:"0.7rem",color:"#6b7c72"}}>Only you should know this PIN.</span>
               </div>
             </div>
           </div>
