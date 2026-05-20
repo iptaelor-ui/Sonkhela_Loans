@@ -698,23 +698,17 @@ function RecordsPage({ settled, setSettled, showToast }) {
 
 
 // ── Notifications Page ─────────────────────────────────────────────────────────
-function NotificationsPage({ loans, showToast }) {
-  const now = new Date();
-  const in7 = new Date(now.getTime() + 7*86400000);
-  const in3 = new Date(now.getTime() + 3*86400000);
-
-  const overdueLoans = loans.filter(l => isOverdue(l));
-  const dueTodayLoans = loans.filter(l => l.status==="active" && !isOverdue(l) && new Date(l.due_date+"T00:00:00").toDateString() === now.toDateString());
-  const due3Loans = loans.filter(l => l.status==="active" && !isOverdue(l) && new Date(l.due_date+"T00:00:00") <= in3 && new Date(l.due_date+"T00:00:00").toDateString() !== now.toDateString());
-  const due7Loans = loans.filter(l => l.status==="active" && !isOverdue(l) && new Date(l.due_date+"T00:00:00") > in3 && new Date(l.due_date+"T00:00:00") <= in7);
-
-  const Section = ({ title, color, borderColor, loans, emptyMsg }) => (
+function NotifSection({ title, color, borderColor, loans, showToast }) {
+  const loanFont = "'Lora',serif";
+  return (
     <div className="card" style={{borderTop:`3px solid ${borderColor}`}}>
       <div className="card-head">
         <div className="card-title" style={{color}}>{title} <span style={{background:color,color:"#fff",borderRadius:"20px",padding:"2px 10px",fontSize:"0.72rem",marginLeft:6}}>{loans.length}</span></div>
       </div>
       {loans.length === 0 ? (
-        <div style={{padding:"1.5rem",textAlign:"center",color:"var(--muted)",fontSize:"0.85rem"}}>{emptyMsg}</div>
+        <div style={{padding:"1.5rem",textAlign:"center",color:"var(--muted)",fontSize:"0.85rem"}}>
+          {title.includes("Overdue") ? "✅ No overdue loans — great!" : title.includes("Today") ? "No loans due today." : title.includes("1–3") ? "No loans due in the next 3 days." : "No loans due in the next 7 days."}
+        </div>
       ) : (
         <div className="tbl-wrap">
           <table>
@@ -722,7 +716,7 @@ function NotificationsPage({ loans, showToast }) {
             <tbody>
               {loans.map(loan => (
                 <tr key={loan.id}>
-                  <td style={{fontWeight:800,fontFamily:"'Lora',serif",fontSize:"0.8rem"}}>{loan.id}</td>
+                  <td style={{fontWeight:800,fontFamily:loanFont,fontSize:"0.8rem"}}>{loan.id}</td>
                   <td style={{fontWeight:700}}>{loan.client_name}</td>
                   <td style={{fontSize:"0.78rem",color:"var(--muted)"}}>{loan.client_phone||"—"}</td>
                   <td style={{fontWeight:700}}>{fmt(loan.amount)}</td>
@@ -736,6 +730,16 @@ function NotificationsPage({ loans, showToast }) {
       )}
     </div>
   );
+}
+
+function NotificationsPage({ loans, showToast }) {
+  const now = new Date();
+  const in7 = new Date(now.getTime() + 7*86400000);
+  const in3 = new Date(now.getTime() + 3*86400000);
+  const overdueLoans = loans.filter(l => isOverdue(l));
+  const dueTodayLoans = loans.filter(l => l.status==="active" && !isOverdue(l) && new Date(l.due_date+"T00:00:00").toDateString() === now.toDateString());
+  const due3Loans = loans.filter(l => l.status==="active" && !isOverdue(l) && new Date(l.due_date+"T00:00:00") <= in3 && new Date(l.due_date+"T00:00:00").toDateString() !== now.toDateString());
+  const due7Loans = loans.filter(l => l.status==="active" && !isOverdue(l) && new Date(l.due_date+"T00:00:00") > in3 && new Date(l.due_date+"T00:00:00") <= in7);
 
   return (
     <>
@@ -743,7 +747,6 @@ function NotificationsPage({ loans, showToast }) {
         <h1 style={{fontFamily:"'Lora',serif",fontSize:"1.5rem",fontWeight:700,marginBottom:4}}>🔔 Alerts & Notifications</h1>
         <p style={{color:"var(--muted)",fontSize:"0.85rem"}}>Stay on top of overdue and upcoming loan repayments.</p>
       </div>
-
       <div className="stats-row" style={{marginBottom:"1.5rem"}}>
         <div className="stat-card" style={{borderTopColor:"#c0392b"}}>
           <div className="stat-label">Overdue</div>
@@ -761,11 +764,10 @@ function NotificationsPage({ loans, showToast }) {
           <div className="stat-sub">within 7 days</div>
         </div>
       </div>
-
-      <Section title="🚨 Overdue Loans" color="#c0392b" borderColor="#c0392b" loans={overdueLoans} emptyMsg="✅ No overdue loans — great!"/>
-      <Section title="⏰ Due Today" color="#d97706" borderColor="#d97706" loans={dueTodayLoans} emptyMsg="No loans due today."/>
-      <Section title="⚠️ Due in 1–3 Days" color="#d97706" borderColor="#f59e0b" loans={due3Loans} emptyMsg="No loans due in the next 3 days."/>
-      <Section title="📅 Due in 4–7 Days" color="#2563eb" borderColor="#2563eb" loans={due7Loans} emptyMsg="No loans due in the next 7 days."/>
+      <NotifSection title="🚨 Overdue Loans" color="#c0392b" borderColor="#c0392b" loans={overdueLoans} showToast={showToast}/>
+      <NotifSection title="⏰ Due Today" color="#d97706" borderColor="#d97706" loans={dueTodayLoans} showToast={showToast}/>
+      <NotifSection title="⚠️ Due in 1–3 Days" color="#d97706" borderColor="#f59e0b" loans={due3Loans} showToast={showToast}/>
+      <NotifSection title="📅 Due in 4–7 Days" color="#2563eb" borderColor="#2563eb" loans={due7Loans} showToast={showToast}/>
     </>
   );
 }
