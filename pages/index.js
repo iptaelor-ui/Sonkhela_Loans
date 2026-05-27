@@ -562,7 +562,7 @@ function ClientsPage({ loans, setLoans, settled, setSettled, showToast, business
 
 // ── Loan Modal ─────────────────────────────────────────────────────────────────
 function LoanModal({ loan, onClose, onSave, saving }) {
-  const blank = { client_name:"",client_phone:"",client_nrc:"",client_email:"",amount:"",interest_rate:"",processing_date:new Date().toISOString().slice(0,10),due_date:"",repayment:"monthly",collateral:"",collateral_value:"",status:"active",terms:"Collateral Ownership: If the borrower fails to pay any installment on the due date an extra two days shall be given to the borrower to clear up the balance. Failure to that, the borrower loses ownership of the collateral unless they renew the contract." };
+  const blank = { client_name:"",client_phone:"",client_nrc:"",client_email:"",amount:"",interest_rate:"",processing_date:new Date().toISOString().slice(0,10),due_date:"",repayment:"monthly",collateral:"",collateral_value:"",status:"active",terms:"Collateral Ownership: In the event that the Borrower fails to pay any installment due under this Agreement on or before the specified due date, the Lender shall have the right to take full ownership and possession of the collateral pledged under this Agreement, unless the Borrower renews the loan contract in accordance with the terms herein. Renewal of the contract shall only be permitted upon full payment of the interest due on the current loan, subject to the mutual agreement of the parties. Upon such default and failure to renew, the Borrower shall forfeit all rights, title, and interest in the collateral to the Lender without further notice." };
   const [f, setF] = useState(loan || blank);
   const set = (k,v) => setF(p=>({...p,[k]:v}));
   const uploadCollateral = (e) => {
