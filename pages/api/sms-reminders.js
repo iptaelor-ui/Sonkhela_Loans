@@ -20,8 +20,11 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+// Compute "today" in Zambia time (server runs on UTC)
+  const lusakaNow = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Africa/Lusaka" })
+  );
+  const today = new Date(Date.UTC(lusakaNow.getFullYear(), lusakaNow.getMonth(), lusakaNow.getDate()));
 
   // Fetch all active (unsettled) loans with a phone number
   const { data: loans, error } = await supabase
