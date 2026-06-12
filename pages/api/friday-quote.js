@@ -36,7 +36,7 @@ async function generateFinancialQuote() {
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 200,
       messages: [
         {
@@ -62,6 +62,9 @@ Return ONLY the message, nothing else.`,
   });
 
   const data = await response.json();
+  if (data.error) {
+    console.error("Claude API error:", JSON.stringify(data.error));
+  }
   return data.content?.[0]?.text?.trim() || null;
 }
 
