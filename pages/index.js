@@ -190,8 +190,11 @@ export default function App() {
   };
 
   const loadLoans = async () => {
+    // Skip heavy base64 fields (collateral_photo, client_signature) in the lists.
+    // They're loaded only when editing a single loan — this is what makes login fast.
+    const LIST_COLS = "id,client_name,client_phone,client_nrc,client_email,amount,interest_rate,processing_date,due_date,repayment,collateral,collateral_value,status,terms,created_at";
     const [loansRes, settledRes] = await Promise.all([
-      supabase.from("loans").select("*").order("created_at", { ascending: false }),
+      supabase.from("loans").select(LIST_COLS).order("created_at", { ascending: false }),
       supabase.from("settled_loans").select("*").order("settled_at", { ascending: false }),
     ]);
     if (loansRes.data) setLoans(loansRes.data);
@@ -543,8 +546,7 @@ function ClientsPage({ loans, setLoans, settled, setSettled, showToast, business
                     </td>
                     <td>
                       <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                        <button className="btn btn-ghost btn-xs" onClick={() => {setEditTarget(loan);setShowModal(true);}}>Edit</button>
-                        {loan.client_email && <button className="btn btn-blue btn-xs" disabled={sendingEmail===loan.id} onClick={() => sendReminder(loan)}>{sendingEmail===loan.id?"...":"📧"}</button>}
+<button className="btn btn-ghost btn-xs" onClick={async () => { const { data } = await supabase.from("loans").select("*").eq("id", loan.id).single(); setEditTarget(data || loan); setShowModal(true); }}>Edit</button>                        {loan.client_email && <button className="btn btn-blue btn-xs" disabled={sendingEmail===loan.id} onClick={() => sendReminder(loan)}>{sendingEmail===loan.id?"...":"📧"}</button>}
                         <button className="btn btn-red btn-xs" onClick={() => deleteLoan(loan.id)}>✕</button>
                       </div>
                     </td>
