@@ -1,6 +1,6 @@
 // pages/api/friday-quote.js
 // Every Friday at 8AM: generates a fresh AI financial quote using Claude
-// and sends it to ALL clients (active + settled)
+// and sends it to ALL unique clients (deduplicated by phone number)
 // Triggered by cron-job.org every Friday
 
 import { createClient } from "@supabase/supabase-js";
@@ -41,97 +41,107 @@ async function generateFinancialQuote() {
       messages: [
         {
           role: "user",
-          content: `Generate a short, powerful Friday financial motivation message for young Zambian adults who have taken small loans and are working to improve their finances.
+          content: `Generate a short, powerful Friday financial motivation message for young Zambian adults who have taken small loans and are working to improve their finances. 
 
-The theme this week is: "${theme}"
+Theme: ${theme}
 
 Requirements:
-- Must feel personal, warm and African (not generic Western advice)
-- 2-3 sentences maximum (SMS character limit)
-- End with a short motivational call to action
-- Start with "Friday Wisdom:"
-- Sign off as "- Sonkhela Capital"
-- Total message must be under 300 characters
-- Make it GENUINELY helpful - practical advice someone can act on this weekend
-- Plain text only, no emojis (SMS compatibility)
+- Keep it under 160 characters total (one SMS)
+- Start with a relevant emoji
+- End with "- Sonkhela Capital"
+- Make it feel personal and uplifting, not preachy
+- Use simple, clear language
+- No quotes within quotes
 
-Return ONLY the message, nothing else.`,
+Just output the message text, nothing else.`,
         },
       ],
     }),
   });
 
   const data = await response.json();
-  if (data.error) {
-    console.error("Claude API error:", JSON.stringify(data.error));
-  }
-  return data.content?.[0]?.text?.trim() || null;
+  return data.content[0].text.trim();
 }
 
 export default async function handler(req, res) {
-  // Protect endpoint with a secret token
+  // Verify cron secret
   if (req.headers["x-cron-secret"] !== process.env.CRON_SECRET) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  // Only run on Fridays (safety check) - can be bypassed with ?force=true for testing
-  const day = new Date().getDay();
-  if (day !== 5 && req.query.force !== "true") {
-    return res.status(200).json({ message: "Not Friday, skipping." });
+  // Check it's actually Friday in Zambia (UTC+2)
+  const nowZambia = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Africa/Lusaka" })
+  );
+  const isFriday = nowZambia.getDay() === 5;
+
+  if (!isFriday) {
+    return res.status(200).json({ message: "Not Friday in Zambia — skipping." });
   }
 
-  // Generate the quote
-  const quote = await generateFinancialQuote();
-  if (!quote) {
-    return res.status(500).json({ error: "Failed to generate quote" });
-  }
-
-  // Get ALL unique client phone numbers (active + settled loans)
-  const [activeRes, settledRes] = await Promise.all([
-    supabase.from("loans").select("client_phone").not("client_phone", "is", null),
-    supabase.from("settled_loans").select("client_phone").not("client_phone", "is", null),
-  ]);
-
-  const allClients = [...(activeRes.data || []), ...(settledRes.data || [])];
-
-  const seen = new Set();
-  const uniquePhones = [];
-  for (const c of allClients) {
-    if (c.client_phone && !seen.has(c.client_phone)) {
-      seen.add(c.client_phone);
-      uniquePhones.push(c.client_phone);
-    }
-  }
-
-  if (uniquePhones.length === 0) {
-    return res.status(200).json({ message: "No clients found." });
-  }
-
-  // Send in batches of 50
-  const BATCH_SIZE = 50;
-  let totalSent = 0;
-
-  for (let i = 0; i < uniquePhones.length; i += BATCH_SIZE) {
-    const batch = uniquePhones.slice(i, i + BATCH_SIZE);
-    const result = await sendSMS(batch, quote);
-    if (result.success) totalSent += batch.length;
-  }
-
-  // Log the quote (non-blocking)
   try {
-    await supabase.from("sms_logs").insert({
-      type: "friday_quote",
-      message: quote,
-      recipients_count: totalSent,
-      sent_at: new Date().toISOString(),
-    });
-  } catch (e) {
-    console.warn("sms_logs insert skipped:", e.message);
-  }
+    // Fetch phone numbers from active loans
+    const { data: activeLoans } = await supabase
+      .from("loans")
+      .select("client_phone, client_name")
+      .eq("status", "active");
 
-  return res.status(200).json({
-    success: true,
-    quote,
-    sent_to: totalSent,
-  });
+    // Fetch phone numbers from settled loans
+    const { data: settledLoans } = await supabase
+      .from("settled_loans")
+      .select("client_phone, client_name");
+
+    // Combine all records
+    const allRecords = [...(activeLoans || []), ...(settledLoans || [])];
+
+    // ── DEDUPLICATION ──────────────────────────────────────────────
+    // Build a Map keyed by phone number — first occurrence wins
+    const uniqueClients = new Map();
+    for (const record of allRecords) {
+      const phone = record.client_phone?.trim();
+      if (phone && !uniqueClients.has(phone)) {
+        uniqueClients.set(phone, record.client_name);
+      }
+    }
+    // ──────────────────────────────────────────────────────────────
+
+    // Validate Zambian phone numbers
+    const validPhones = [...uniqueClients.keys()].filter((p) =>
+      /^\+260[97]\d{8}$/.test(p)
+    );
+
+    if (validPhones.length === 0) {
+      return res.status(200).json({ message: "No valid phone numbers found." });
+    }
+
+    // Generate the quote
+    const quote = await generateFinancialQuote();
+
+    // Send SMS to all unique valid numbers
+    const result = await sendSMS(validPhones, quote);
+
+    // Log to Supabase
+    try {
+      await supabase.from("sms_logs").insert({
+        type: "friday_quote",
+        message: quote,
+        recipients_count: validPhones.length,
+        sent_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.warn("sms_logs insert skipped:", e.message);
+    }
+
+    return res.status(200).json({
+      success: true,
+      quote,
+      total_records: allRecords.length,
+      unique_recipients: validPhones.length,
+      duplicates_removed: allRecords.length - uniqueClients.size,
+      result,
+    });
+  } catch (error) {
+    console.error("Friday quote error:", error);
+    return res.status(500).json({ error: error.message });
+  }
 }
