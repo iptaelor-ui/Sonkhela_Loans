@@ -15,6 +15,7 @@ export default async function handler(req, res) {
   const { log_id } = req.body;
   if (!log_id) return res.status(400).json({ error: "log_id required" });
 
+  // Fetch the failed log
   const { data: log, error: fetchErr } = await supabase
     .from("sms_logs")
     .select("*")
@@ -25,8 +26,10 @@ export default async function handler(req, res) {
     return res.status(404).json({ error: "Log not found" });
   }
 
+  // Resend
   const result = await sendSMS(log.phone_number, log.message);
 
+  // Update log status
   const newStatus = result.success ? "Retried-Success" : "Retried-Failed";
   await supabase
     .from("sms_logs")
