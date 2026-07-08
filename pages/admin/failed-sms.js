@@ -1,19 +1,21 @@
-// pages/admin/failed-sms.js
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
 
 export default function FailedSMS() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(null);
 
+  function getSupabase() {
+    return createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    );
+  }
+
   async function loadLogs() {
     setLoading(true);
+    const supabase = getSupabase();
     const { data } = await supabase
       .from("sms_logs")
       .select("*")
@@ -54,7 +56,7 @@ export default function FailedSMS() {
       {loading ? (
         <p>Loading...</p>
       ) : logs.length === 0 ? (
-        <p>No failed messages 🎉</p>
+        <p>No failed messages</p>
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
