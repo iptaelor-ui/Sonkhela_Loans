@@ -213,15 +213,14 @@ export default function App() {
     }
   };
 
-const navItems = [
-  { id: "dashboard", icon: "📊", label: "Dashboard" },
-  { id: "applications", icon: "📥", label: "Applications" },
-  { id: "clients", icon: "👥", label: "Clients" },
-  { id: "records", icon: "📁", label: "Records" },
-  { id: "notifications", icon: "🔔", label: "Alerts" },
-  { id: "summary", icon: "📈", label: "Summary" },
-  { id: "settings", icon: "⚙️", label: "Settings" },
-];
+  const navItems = [
+    { id:"dashboard", icon:"📊", label:"Dashboard" },
+    { id:"clients", icon:"👥", label:"Clients" },
+    { id:"records", icon:"📁", label:"Records" },
+    { id:"notifications", icon:"🔔", label:"Alerts" },
+    { id:"summary", icon:"📈", label:"Summary" },
+    { id:"settings", icon:"⚙️", label:"Settings" },
+  ];
 
   if (screen === "loading") return (<><style>{ADMIN_STYLES}</style><div className="loading-screen"><div className="loading-spinner"/><div className="loading-text">Loading Sonkhela Soft Loans...</div></div></>);
 
@@ -849,161 +848,57 @@ function SettingsPage({ business, setBusiness, showToast }) {
     setBusiness(f); showToast("Settings saved! ✓");
   };
 
-return (
-  <>
-    <style>{ADMIN_STYLES}</style>
-
-    {toast.msg && (
-      <div
-        className={`toast ${
-          toast.type === "error"
-            ? "error"
-            : toast.type === "info"
-            ? "info"
-            : ""
-        }`}
-      >
-        {toast.msg}
+  return (
+    <>
+      <div style={{marginBottom:"1.25rem"}}>
+        <h1 style={{fontFamily:"'Lora',serif",fontSize:"1.5rem",fontWeight:700,marginBottom:4}}>Settings</h1>
+        <p style={{color:"var(--muted)",fontSize:"0.85rem"}}>Manage your profile, signature and security</p>
       </div>
-    )}
-
-    <div className="shell">
-
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <div className="brand-logo">
-            {business?.logo ? (
-              <img src={business.logo} alt="" />
-            ) : (
-              (business?.name || "S")[0]
-            )}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1.5rem"}}>
+        <div className="card">
+          <div className="card-head"><div className="card-title">🏢 Business Profile</div></div>
+          <div className="card-body" style={{display:"flex",flexDirection:"column",gap:"1rem"}}>
+            <div className="form-group">
+              <label>Business Logo</label>
+              <div className="upload-area" onClick={() => document.getElementById("logoUpload").click()}>
+                {f.logo?<img className="upload-preview-round" src={f.logo} alt="logo"/>:<div style={{fontSize:"2rem",marginBottom:6}}>🏢</div>}
+                <div style={{fontSize:"0.76rem",color:"var(--muted)",fontWeight:700}}>Click to upload logo</div>
+              </div>
+              <input id="logoUpload" type="file" accept="image/*" style={{display:"none"}} onChange={e=>uploadImage("logo",e)}/>
+            </div>
+            <div className="form-group"><label>Business Name</label><input value={f.name||""} onChange={e=>set("name",e.target.value)}/></div>
+            <div className="form-group"><label>Tagline</label><input value={f.tagline||""} onChange={e=>set("tagline",e.target.value)}/></div>
+            <div className="form-group"><label>Phone</label><input value={f.phone||""} onChange={e=>set("phone",e.target.value)}/></div>
+            <div className="form-group"><label>Email</label><input value={f.email||""} onChange={e=>set("email",e.target.value)}/></div>
+            <div className="form-group"><label>Address</label><input value={f.address||""} onChange={e=>set("address",e.target.value)}/></div>
           </div>
-
-          <div className="brand-name">{business?.name}</div>
-          <div className="brand-tag">{business?.tagline}</div>
         </div>
-
-        <nav className="sidebar-nav">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              className={`nav-item ${
-                activePage === item.id ? "active" : ""
-              }`}
-              onClick={() => setActivePage(item.id)}
-            >
-              <span style={{ width: 20, textAlign: "center" }}>
-                {item.icon}
-              </span>
-
-              {item.label}
-            </button>
-          ))}
-        </nav>
-
-        <div className="sidebar-footer">
-          <button
-            className="dark-toggle"
-            onClick={() => setDarkMode((d) => !d)}
-          >
-            {darkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}
-          </button>
-
-          <button
-            className="logout-btn"
-            onClick={() => {
-              setScreen("login");
-              setPinInput("");
-            }}
-          >
-            🔒 Lock / Logout
+        <div style={{display:"flex",flexDirection:"column",gap:"1.5rem"}}>
+          <div className="card">
+            <div className="card-head"><div className="card-title">✍️ Your Signature</div></div>
+            <div className="card-body">
+              <div className="upload-area" onClick={() => document.getElementById("sigUpload").click()}>
+                {f.signature?<img className="upload-preview" src={f.signature} alt="sig"/>:<div style={{fontSize:"2rem",marginBottom:6}}>✍️</div>}
+                <div style={{fontSize:"0.76rem",color:"var(--muted)",fontWeight:700}}>{f.signature?"Click to change":"Click to upload signature"}</div>
+              </div>
+              <input id="sigUpload" type="file" accept="image/*" style={{display:"none"}} onChange={e=>uploadImage("signature",e)}/>
+              {f.signature&&<button className="btn btn-ghost btn-sm" style={{marginTop:"0.75rem",width:"100%"}} onClick={()=>set("signature",null)}>Remove</button>}
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-head"><div className="card-title">🔐 Security</div></div>
+            <div className="card-body">
+              <div className="form-group">
+                <label>Admin PIN</label>
+                <input type="password" maxLength={6} value={f.admin_pin||""} onChange={e=>set("admin_pin",e.target.value)} placeholder="4–6 digits"/>
+              </div>
+            </div>
+          </div>
+          <button className="btn btn-green" style={{width:"100%",padding:"13px"}} onClick={handleSave} disabled={saving}>
+            {saving?"Saving...":"💾 Save All Settings"}
           </button>
         </div>
-      </aside>
-
-      {/* Main */}
-      <div className="main">
-
-        <div className="topbar">
-          <div className="topbar-title">
-            {navItems.find((n) => n.id === activePage)?.label}
-          </div>
-
-          <div className="topbar-date">
-            {new Date().toLocaleDateString("en-GB", {
-              weekday: "short",
-              day: "numeric",
-              month: "short",
-            })}
-          </div>
-        </div>
-
-        <div className="page">
-
-          {activePage === "dashboard" && (
-            <Dashboard
-              loans={loans}
-              settled={settled}
-              setActivePage={setActivePage}
-              showToast={showToast}
-            />
-          )}
-
-          {activePage === "applications" && (
-            <ApplicationsPage
-              showToast={showToast}
-              business={business}
-              loans={loans}
-              setLoans={setLoans}
-            />
-          )}
-
-          {activePage === "clients" && (
-            <ClientsPage
-              loans={loans}
-              setLoans={setLoans}
-              settled={settled}
-              setSettled={setSettled}
-              showToast={showToast}
-              business={business}
-            />
-          )}
-
-          {activePage === "records" && (
-            <RecordsPage
-              settled={settled}
-              setSettled={setSettled}
-              showToast={showToast}
-            />
-          )}
-
-          {activePage === "notifications" && (
-            <NotificationsPage
-              loans={loans}
-              showToast={showToast}
-            />
-          )}
-
-          {activePage === "summary" && (
-            <SummaryPage
-              loans={loans}
-              settled={settled}
-            />
-          )}
-
-          {activePage === "settings" && (
-            <SettingsPage
-              business={business}
-              setBusiness={setBusiness}
-              showToast={showToast}
-            />
-          )}
-
-        </div>
       </div>
-
-    </div>
-  </>
-);
+    </>
+  );
 }
