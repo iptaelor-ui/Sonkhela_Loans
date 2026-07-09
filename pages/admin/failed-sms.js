@@ -1,21 +1,13 @@
 import { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { supabase, authFetch } from "../shared";
 
 export default function FailedSMS() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(null);
 
-  function getSupabase() {
-    return createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
-  }
-
   async function loadLogs() {
     setLoading(true);
-    const supabase = getSupabase();
     const { data } = await supabase
       .from("sms_logs")
       .select("*")
@@ -27,12 +19,16 @@ export default function FailedSMS() {
   }
 
   useEffect(() => {
-    loadLogs();
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!data?.session) { window.location.href = "/"; return; }
+      loadLogs();
+    })();
   }, []);
 
   async function retry(log_id) {
     setRetrying(log_id);
-    const res = await fetch("/api/retry-sms", {
+    const res = await authFetch("/api/retry-sms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ log_id }),
