@@ -1,13 +1,12 @@
-import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
-
-const supabase = createClient(
-  "https://zxxdvxzgqynkuveipxqc.supabase.co",
-  "sb_publishable_h8ykxzJdMDPnse7cPB_O1Q_SxEk8jh8"
-);
+import { requireAdmin, serviceClient } from "../../lib/serverAuth";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  const admin = await requireAdmin(req);
+  if (!admin) return res.status(401).json({ error: "Unauthorized" });
+  const supabase = serviceClient();
   const { loanId } = req.body;
   if (!loanId) return res.status(400).json({ error: "loanId required" });
 
