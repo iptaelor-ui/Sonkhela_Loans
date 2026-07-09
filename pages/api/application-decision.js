@@ -1,15 +1,15 @@
-import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
+import { requireAdmin, serviceClient } from "../../lib/serverAuth";
 
-const supabase = createClient(
-  "https://zxxdvxzgqynkuveipxqc.supabase.co",
-  "sb_publishable_h8ykxzJdMDPnse7cPB_O1Q_SxEk8jh8"
-);
 
 const fmtK = (n) => "K " + Number(n).toLocaleString("en", { minimumFractionDigits: 2 });
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  const admin = await requireAdmin(req);
+  if (!admin) return res.status(401).json({ error: "Unauthorized" });
+  const supabase = serviceClient();
   const { type, applicationId, note, loanId, agreementUrl } = req.body || {};
   if (!type || !applicationId) return res.status(400).json({ error: "type and applicationId required" });
   if (!["approved", "rejected", "more_info"].includes(type)) return res.status(400).json({ error: "Invalid type" });
