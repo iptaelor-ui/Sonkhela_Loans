@@ -76,6 +76,23 @@ tr:hover td{background:var(--accent);}
 .badge-active{background:#dcf5e7;color:#145f39;}
 .badge-overdue{background:#fdf0ee;color:#c0392b;}
 .badge-settled{background:#e8eaed;color:#555;}
+.badge-app-pending{background:#fef3cd;color:#8a6d1a;}
+.badge-app-under_review{background:#dbeafe;color:#1d4ed8;}
+.badge-app-approved{background:#dcf5e7;color:#145f39;}
+.badge-app-rejected{background:#fdf0ee;color:#c0392b;}
+.nav-badge{margin-left:auto;background:#f59e0b;color:#fff;border-radius:20px;min-width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:0.66rem;font-weight:900;padding:0 6px;}
+.nav-badge.mobile{position:absolute;top:0;right:6px;margin-left:0;min-width:16px;height:16px;font-size:0.58rem;}
+.app-tabs{display:flex;gap:8px;margin-bottom:1.25rem;flex-wrap:wrap;}
+.app-tab{padding:8px 16px;border-radius:20px;border:1px solid var(--border);background:var(--white);cursor:pointer;font-family:'Nunito',sans-serif;font-size:0.8rem;font-weight:800;color:var(--muted);transition:all 0.18s;display:inline-flex;align-items:center;gap:6px;}
+.app-tab:hover{border-color:#1a7a4a;color:#145f39;}
+.app-tab.active{background:#145f39;color:#fff;border-color:#145f39;}
+.app-tab-count{background:rgba(0,0,0,0.12);border-radius:12px;padding:1px 7px;font-size:0.68rem;}
+.app-tab.active .app-tab-count{background:rgba(255,255,255,0.25);}
+.app-img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:0.75rem;}
+.app-img-thumb{display:block;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--accent);text-decoration:none;position:relative;}
+.app-img-thumb img{width:100%;height:120px;object-fit:cover;display:block;}
+.app-img-fallback{display:flex;flex-direction:column;align-items:center;justify-content:center;height:120px;color:var(--muted);font-size:0.72rem;font-weight:700;text-align:center;}
+.app-img-label{display:block;padding:5px 8px;font-size:0.68rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;background:var(--white);border-top:1px solid var(--border);}
 
 /* ── Buttons ── */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;border:none;font-family:'Nunito',sans-serif;font-weight:800;font-size:0.85rem;cursor:pointer;transition:all 0.18s;}
@@ -171,6 +188,7 @@ export default function App() {
   const [business, setBusiness] = useState(null);
   const [loans, setLoans] = useState([]);
   const [settled, setSettled] = useState([]);
+  const [applications, setApplications] = useState([]);
   const [darkMode, setDarkMode] = useState(false);
   const [toast, setToast] = useState({ msg: "", type: "ok" });
 
@@ -193,12 +211,14 @@ export default function App() {
     // Skip heavy base64 fields (collateral_photo, client_signature) in the lists.
     // They're loaded only when editing a single loan — this is what makes login fast.
     const LIST_COLS = "id,client_name,client_phone,client_nrc,client_email,amount,interest_rate,processing_date,due_date,repayment,collateral,collateral_value,status,terms,created_at";
-    const [loansRes, settledRes] = await Promise.all([
+    const [loansRes, settledRes, appsRes] = await Promise.all([
       supabase.from("loans").select(LIST_COLS).order("created_at", { ascending: false }),
       supabase.from("settled_loans").select("*").order("settled_at", { ascending: false }),
+      supabase.from("applications").select("*").order("created_at", { ascending: false }),
     ]);
     if (loansRes.data) setLoans(loansRes.data);
     if (settledRes.data) setSettled(settledRes.data);
+    if (appsRes.data) setApplications(appsRes.data);
   };
 
   const handlePinKey = (k) => {
@@ -213,8 +233,11 @@ export default function App() {
     }
   };
 
+  const pendingApps = applications.filter(a => a.status === "pending" || a.status === "under_review").length;
+
   const navItems = [
     { id:"dashboard", icon:"📊", label:"Dashboard" },
+    { id:"applications", icon:"📥", label:"Applications", badge: pendingApps },
     { id:"clients", icon:"👥", label:"Clients" },
     { id:"records", icon:"📁", label:"Records" },
     { id:"notifications", icon:"🔔", label:"Alerts" },
@@ -263,6 +286,7 @@ export default function App() {
           {navItems.map(item => (
             <button key={item.id} className={`nav-item ${activePage===item.id?"active":""}`} onClick={() => setActivePage(item.id)}>
               <span style={{width:20,textAlign:"center"}}>{item.icon}</span>{item.label}
+              {item.badge > 0 && <span className="nav-badge">{item.badge}</span>}
             </button>
           ))}
         </nav>
@@ -278,9 +302,10 @@ export default function App() {
       <nav className="mobile-nav">
         <div className="mobile-nav-items">
           {navItems.map(item => (
-            <button key={item.id} className={`mobile-nav-item ${activePage===item.id?"active":""}`} onClick={() => setActivePage(item.id)}>
+            <button key={item.id} className={`mobile-nav-item ${activePage===item.id?"active":""}`} onClick={() => setActivePage(item.id)} style={{position:"relative"}}>
               <span className="icon">{item.icon}</span>
               {item.label}
+              {item.badge > 0 && <span className="nav-badge mobile">{item.badge}</span>}
             </button>
           ))}
         </div>
@@ -296,6 +321,7 @@ export default function App() {
         </div>
         <div className="page fade-up" key={activePage}>
           {activePage==="dashboard" && <Dashboard loans={loans} settled={settled} setActivePage={setActivePage} showToast={showToast}/>}
+          {activePage==="applications" && <ApplicationsPage applications={applications} setApplications={setApplications} loans={loans} setLoans={setLoans} showToast={showToast}/>}
           {activePage==="clients" && <ClientsPage loans={loans} setLoans={setLoans} settled={settled} setSettled={setSettled} showToast={showToast} business={business}/>}
           {activePage==="records" && <RecordsPage settled={settled} setSettled={setSettled} showToast={showToast}/>}
           {activePage==="notifications" && <NotificationsPage loans={loans} showToast={showToast}/>}
@@ -309,6 +335,267 @@ export default function App() {
 
 function CopyLinkBtn({ loanId, showToast }) {
   return <button className="btn btn-link btn-xs" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/agreement/${loanId}`).then(() => showToast("✓ Link copied!")); }}>🔗 Copy</button>;
+}
+
+// ── Applications (from website) ────────────────────────────────────────────────
+const APP_STATUSES = [
+  { id: "pending", label: "Pending", icon: "🕐" },
+  { id: "under_review", label: "Under Review", icon: "🔍" },
+  { id: "approved", label: "Approved", icon: "✅" },
+  { id: "rejected", label: "Rejected", icon: "❌" },
+];
+
+const LOAN_TYPE_NAMES = {
+  collateral: "Collateral Backed Loan",
+  payslip: "Payslip Backed Loan",
+  student: "Student Loan",
+  marketeer: "Marketeer Loan",
+  business: "Business Loan",
+  "white-book": "White Book Loan",
+};
+
+// Renders an image stored in the private "loan-documents" bucket.
+// Signed URLs are created server-side (/api/storage-url) with the service role key,
+// so the bucket stays private and images are only viewable through this admin system.
+function StorageImg({ path, label }) {
+  const [url, setUrl] = useState(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!path) return;
+    let alive = true;
+    fetch("/api/storage-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    })
+      .then(r => r.json())
+      .then(d => { if (alive) { if (d.url) setUrl(d.url); else setFailed(true); } })
+      .catch(() => { if (alive) setFailed(true); });
+    return () => { alive = false; };
+  }, [path]);
+  if (!path) return null;
+  return (
+    <a className="app-img-thumb" href={url || "#"} target="_blank" rel="noreferrer" title="Open full size">
+      {url && !failed
+        ? <img src={url} alt={label} onError={() => setFailed(true)}/>
+        : <span className="app-img-fallback">🖼️<br/>{failed ? "Could not load" : "Loading..."}</span>}
+      <span className="app-img-label">{label}</span>
+    </a>
+  );
+}
+
+function notifyApplicant(type, applicationId, extra = {}) {
+  // Fire-and-forget email; failures are logged but never block the admin action.
+  return fetch("/api/application-decision", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type, applicationId, ...extra }),
+  }).then(r => r.json()).catch(err => ({ error: String(err) }));
+}
+
+function ApplicationsPage({ applications, setApplications, loans, setLoans, showToast }) {
+  const [tab, setTab] = useState("pending");
+  const [detail, setDetail] = useState(null);      // application being viewed
+  const [approving, setApproving] = useState(null); // application being approved (opens LoanModal)
+  const [saving, setSaving] = useState(false);
+
+  const filtered = applications.filter(a => (a.status || "pending") === tab);
+  const counts = Object.fromEntries(APP_STATUSES.map(s => [s.id, applications.filter(a => (a.status||"pending")===s.id).length]));
+
+  const updateApp = async (id, fields) => {
+    const { error } = await supabase.from("applications").update({ ...fields, reviewed_at: new Date().toISOString() }).eq("id", id);
+    if (error) { showToast("Failed to update application.", "error"); return false; }
+    setApplications(p => p.map(a => a.id === id ? { ...a, ...fields } : a));
+    return true;
+  };
+
+  const handleReject = async (app) => {
+    const reason = window.prompt("Reason for rejection (will be emailed to the applicant):", "");
+    if (reason === null) return;
+    if (!(await updateApp(app.id, { status: "rejected", admin_notes: reason }))) return;
+    showToast("Application rejected.");
+    setDetail(null);
+    const res = await notifyApplicant("rejected", app.id, { note: reason });
+    if (res?.error) showToast("Status saved, but email failed: " + res.error, "error");
+    else if (app.email) showToast("Rejection email sent ✓");
+  };
+
+  const handleMoreInfo = async (app) => {
+    const note = window.prompt("What additional information do you need from the applicant?", "");
+    if (!note) return;
+    if (!(await updateApp(app.id, { status: "under_review", admin_notes: note }))) return;
+    showToast("Marked as Under Review.");
+    setDetail(null);
+    const res = await notifyApplicant("more_info", app.id, { note });
+    if (res?.error) showToast("Status saved, but email failed: " + res.error, "error");
+    else if (app.email) showToast("Request sent to applicant ✓");
+  };
+
+  // Approve: open the existing LoanModal pre-filled from the application.
+  const startApprove = (app) => {
+    const weeks = Number(app.repayment_period) || 1;
+    const today = new Date();
+    const due = new Date(today.getTime() + weeks * 7 * 86400000);
+    setApproving({
+      app,
+      prefill: {
+        client_name: app.full_name || "",
+        client_phone: app.phone || "",
+        client_nrc: app.nrc_number || "",
+        client_email: app.email || "",
+        amount: app.loan_amount || "",
+        interest_rate: "",
+        processing_date: today.toISOString().slice(0, 10),
+        due_date: due.toISOString().slice(0, 10),
+        repayment: "lump-sum",
+        collateral: app.collateral_description || "",
+        collateral_value: "",
+        status: "active",
+        terms: "In the event that the Borrower fails to pay any installment due under this Agreement on or before the specified due date, the Lender shall have the right to take full ownership and possession of the collateral pledged under this Agreement, unless the Borrower renews the loan contract in accordance with the terms herein. Renewal of the contract shall only be permitted upon full payment of the interest due on the current loan, subject to the mutual agreement of the parties. Upon such default and failure to renew, the Borrower shall forfeit all rights, title, and interest in the collateral to the Lender without further notice.",
+      },
+    });
+    setDetail(null);
+  };
+
+  const finishApprove = async (loanData) => {
+    setSaving(true);
+    const app = approving.app;
+    const newLoan = { ...loanData, id: genId() };
+    const { error } = await supabase.from("loans").insert(newLoan);
+    if (error) { showToast("Failed to create loan agreement.", "error"); setSaving(false); return; }
+    setLoans(p => [newLoan, ...p]);
+    if (!(await updateApp(app.id, { status: "approved", loan_id: newLoan.id }))) { setSaving(false); return; }
+    setSaving(false);
+    setApproving(null);
+    showToast("Approved! Agreement " + newLoan.id + " created ✓");
+    const res = await notifyApplicant("approved", app.id, { loanId: newLoan.id, agreementUrl: `${window.location.origin}/agreement/${newLoan.id}` });
+    if (res?.error) showToast("Approved, but email failed: " + res.error, "error");
+    else if (app.email) showToast("Approval email sent ✓");
+  };
+
+  return (
+    <>
+      <div className="app-tabs">
+        {APP_STATUSES.map(s => (
+          <button key={s.id} className={`app-tab ${tab===s.id?"active":""}`} onClick={() => setTab(s.id)}>
+            {s.icon} {s.label}{counts[s.id] > 0 && <span className="app-tab-count">{counts[s.id]}</span>}
+          </button>
+        ))}
+      </div>
+
+      <div className="card">
+        <div className="card-head"><div className="card-title">{APP_STATUSES.find(s=>s.id===tab)?.label} Applications</div></div>
+        <div className="card-body" style={{padding: filtered.length ? 0 : "2.5rem", textAlign: filtered.length ? "left" : "center"}}>
+          {filtered.length === 0 ? (
+            <div style={{color:"var(--muted)",fontWeight:700,fontSize:"0.9rem"}}>No {tab.replace("_"," ")} applications.</div>
+          ) : (
+            <div className="table-wrap"><table>
+              <thead><tr><th>Applicant</th><th>Loan Type</th><th>Amount</th><th>Period</th><th>Applied</th><th></th></tr></thead>
+              <tbody>
+                {filtered.map(app => (
+                  <tr key={app.id}>
+                    <td>
+                      <div style={{fontWeight:800}}>{app.full_name}</div>
+                      <div style={{fontSize:"0.74rem",color:"var(--muted)"}}>{app.phone}</div>
+                    </td>
+                    <td>{LOAN_TYPE_NAMES[app.loan_type] || app.loan_type}</td>
+                    <td style={{fontWeight:800}}>{fmt(app.loan_amount)}</td>
+                    <td>{app.repayment_period} week{Number(app.repayment_period)>1?"s":""}</td>
+                    <td>{app.created_at ? new Date(app.created_at).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}) : "—"}</td>
+                    <td style={{textAlign:"right",whiteSpace:"nowrap"}}>
+                      {tab === "approved" && app.loan_id && <CopyLinkBtn loanId={app.loan_id} showToast={showToast}/>}
+                      <button className="btn btn-outline btn-xs" style={{marginLeft:6}} onClick={() => setDetail(app)}>View</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table></div>
+          )}
+        </div>
+      </div>
+
+      {detail && (
+        <AppDetailModal
+          app={detail}
+          onClose={() => setDetail(null)}
+          onApprove={() => startApprove(detail)}
+          onReject={() => handleReject(detail)}
+          onMoreInfo={() => handleMoreInfo(detail)}
+          showToast={showToast}
+        />
+      )}
+
+      {approving && (
+        <LoanModal loan={approving.prefill} onClose={() => setApproving(null)} onSave={finishApprove} saving={saving}/>
+      )}
+    </>
+  );
+}
+
+function AppDetailModal({ app, onClose, onApprove, onReject, onMoreInfo, showToast }) {
+  const status = app.status || "pending";
+  const cell = (label, value) => (
+    <div className="agr-cell"><div className="agr-cell-label">{label}</div><div className="agr-cell-value">{value || "—"}</div></div>
+  );
+  return (
+    <div className="modal-backdrop" onClick={e => e.target===e.currentTarget && onClose()}>
+      <div className="modal fade-up">
+        <div className="modal-head">
+          <div className="modal-title">Application — {app.full_name} <span className={`badge badge-app-${status}`} style={{marginLeft:8}}>{status.replace("_"," ")}</span></div>
+          <button className="close-btn" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p className="section-sub">👤 Applicant</p>
+          <div className="agr-grid" style={{marginBottom:"1.25rem"}}>
+            {cell("Full Name", app.full_name)}
+            {cell("Phone", app.phone)}
+            {cell("NRC Number", app.nrc_number)}
+            {cell("Email", app.email)}
+          </div>
+          <p className="section-sub">💰 Loan Request</p>
+          <div className="agr-grid" style={{marginBottom:"1.25rem"}}>
+            {cell("Loan Type", LOAN_TYPE_NAMES[app.loan_type] || app.loan_type)}
+            {cell("Amount", fmt(app.loan_amount))}
+            {cell("Repayment Period", `${app.repayment_period} week${Number(app.repayment_period)>1?"s":""}`)}
+            {cell("Applied On", app.created_at ? new Date(app.created_at).toLocaleString("en-GB") : "—")}
+          </div>
+          <p className="section-sub">🔒 Collateral</p>
+          <div className="agr-grid" style={{marginBottom:"0.9rem"}}>
+            <div className="agr-cell full"><div className="agr-cell-label">Description</div><div className="agr-cell-value">{app.collateral_description || "—"}</div></div>
+          </div>
+          {(app.collateral_images?.length > 0) && (
+            <div className="app-img-grid">
+              {app.collateral_images.map((p, i) => <StorageImg key={p} path={p} label={`Collateral ${i+1}`}/>)}
+            </div>
+          )}
+          <p className="section-sub" style={{marginTop:"1.25rem"}}>🪪 NRC Images</p>
+          {(app.nrc_front || app.nrc_back) ? (
+            <div className="app-img-grid">
+              <StorageImg path={app.nrc_front} label="NRC Front"/>
+              <StorageImg path={app.nrc_back} label="NRC Back"/>
+            </div>
+          ) : <div style={{color:"var(--muted)",fontSize:"0.82rem",fontWeight:700}}>No NRC images uploaded.</div>}
+          {app.admin_notes && (
+            <>
+              <p className="section-sub" style={{marginTop:"1.25rem"}}>📝 Admin Notes</p>
+              <div className="agr-cell full"><div className="agr-cell-value" style={{fontWeight:600}}>{app.admin_notes}</div></div>
+            </>
+          )}
+        </div>
+        <div className="modal-foot" style={{flexWrap:"wrap"}}>
+          {status === "approved" && app.loan_id && <CopyLinkBtn loanId={app.loan_id} showToast={showToast}/>}
+          {status !== "approved" && status !== "rejected" && (
+            <>
+              <button className="btn btn-ghost" onClick={onMoreInfo}>📩 Request More Info</button>
+              <button className="btn btn-red" onClick={onReject}>Reject</button>
+              <button className="btn btn-green" onClick={onApprove}>✓ Approve</button>
+            </>
+          )}
+          {(status === "approved" || status === "rejected") && <button className="btn btn-ghost" onClick={onClose}>Close</button>}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 
