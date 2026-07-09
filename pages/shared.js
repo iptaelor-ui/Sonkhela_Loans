@@ -16,9 +16,28 @@ export const calcLoan = (amount, rate, repayment) => {
 };
 export const isOverdue = (loan) => loan.status === "active" && loan.due_date && new Date(loan.due_date + "T00:00:00") < new Date();
 export const genId = () => {
-  const y = new Date().getFullYear();
-  const r = String(Math.floor(Math.random() * 900) + 100);
-  return `SSL-${y}-${r}`;
+  // Unguessable ID: ~1 trillion combinations (was only 900 — enumerable).
+  // Excludes ambiguous chars (0/O, 1/I/L) for easy reading over the phone.
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  const arr = new Uint32Array(8);
+  crypto.getRandomValues(arr);
+  let s = "";
+  for (let i = 0; i < 8; i++) s += chars[arr[i] % chars.length];
+  return `SSL-${new Date().getFullYear()}-${s}`;
+};
+
+// fetch() that attaches the admin's Supabase session token.
+// API routes verify this token — without it they return 401.
+export const authFetch = async (url, options = {}) => {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
 };
 
 export const AGR_STYLES = `
