@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { supabase, fmt, fmtDate, isOverdue, genId, AGR_STYLES } from "./shared";
+import { supabase, fmt, fmtDate, isOverdue, genId, authFetch, AGR_STYLES } from "./shared";
 
 const ADMIN_STYLES = `
 ${AGR_STYLES}
@@ -148,6 +148,11 @@ textarea{resize:vertical;min-height:80px;}
 .pin-key.zero{grid-column:2;}
 .pin-key.del{background:#fdf0ee;border-color:#f5c6c0;color:#c0392b;}
 .pin-error{color:#c0392b;font-size:0.85rem;font-weight:700;margin-bottom:0.75rem;}
+.login-input{width:100%;padding:13px 16px;border-radius:12px;border:1.5px solid var(--border);background:var(--white);font-family:'Nunito',sans-serif;font-size:0.95rem;font-weight:700;color:var(--text);outline:none;transition:border 0.18s;}
+.login-input:focus{border-color:#1a7a4a;}
+.login-submit{width:100%;padding:13px;border-radius:12px;border:none;background:#145f39;color:#fff;font-family:'Nunito',sans-serif;font-size:0.95rem;font-weight:800;cursor:pointer;transition:all 0.18s;}
+.login-submit:hover{background:#1a7a4a;}
+.login-submit:disabled{opacity:0.6;cursor:not-allowed;}
 
 /* ── Upload ── */
 .upload-area{border:2px dashed var(--border);border-radius:10px;padding:1.25rem;text-align:center;cursor:pointer;transition:all 0.2s;background:var(--accent);}
@@ -184,6 +189,9 @@ export default function App() {
   const [screen, setScreen] = useState("loading");
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
   const [activePage, setActivePage] = useState("dashboard");
   const [business, setBusiness] = useState(null);
   const [loans, setLoans] = useState([]);
@@ -194,7 +202,19 @@ export default function App() {
 
   const showToast = (msg, type = "ok") => { setToast({ msg, type }); setTimeout(() => setToast({ msg: "", type: "ok" }), 3500); };
 
-  useEffect(() => { loadBusiness(); }, []);
+  useEffect(() => {
+    (async () => {
+      await loadBusiness();
+      // If a previous session is still valid, go straight in.
+      const { data } = await supabase.auth.getSession();
+      if (data?.session) {
+        await loadLoans();
+        setScreen("app");
+      } else {
+        setScreen("login");
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (darkMode) document.body.classList.add("dark");
@@ -203,8 +223,7 @@ export default function App() {
 
   const loadBusiness = async () => {
     const { data } = await supabase.from("business").select("*").eq("id", 1).single();
-    setBusiness(data || { name:"Sonkhela Soft Loans", tagline:"Simple Loans. Real People.", phone:"", email:"", address:"", admin_pin:"1234", logo:null, signature:null });
-    setScreen("login");
+    setBusiness(data || { name:"Sonkhela Soft Loans", tagline:"Simple Loans. Real People.", phone:"", email:"", address:"", logo:null, signature:null });
   };
 
   const loadLoans = async () => {
@@ -221,16 +240,31 @@ export default function App() {
     if (appsRes.data) setApplications(appsRes.data);
   };
 
-  const handlePinKey = (k) => {
-    if (k === "del") { setPinInput(p => p.slice(0,-1)); setPinError(""); return; }
-    if (pinInput.length >= 6) return;
-    const next = pinInput + k;
-    setPinInput(next);
-    const pin = business?.admin_pin || "1234";
-    if (next.length >= pin.length) {
-      if (next === pin) { setTimeout(async () => { await loadLoans(); setScreen("app"); setPinInput(""); }, 200); }
-      else { setTimeout(() => { setPinError("Wrong PIN. Try again."); setPinInput(""); }, 300); }
+  const handleLogin = async (e) => {
+    e?.preventDefault();
+    if (!loginEmail.trim() || !loginPassword) { setPinError("Enter your email and password."); return; }
+    setLoggingIn(true);
+    setPinError("");
+    const { error } = await supabase.auth.signInWithPassword({
+      email: loginEmail.trim(),
+      password: loginPassword,
+    });
+    if (error) {
+      setPinError("Invalid email or password.");
+      setLoggingIn(false);
+      return;
     }
+    setLoginPassword("");
+    await loadBusiness();
+    await loadLoans();
+    setScreen("app");
+    setLoggingIn(false);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setLoginPassword("");
+    setScreen("login");
   };
 
   const pendingApps = applications.filter(a => a.status === "pending" || a.status === "under_review").length;
@@ -252,21 +286,30 @@ export default function App() {
     <div className="login-shell">
       <div className="login-box fade-up">
         <div className="login-logo">{business?.logo ? <img src={business.logo} alt="logo"/> : (business?.name||"S")[0]}</div>
-        <div className="login-title">{business?.name}</div>
-        <div className="login-sub">Admin Login — Enter your PIN</div>
-        <div className="pin-dots">
-          {Array.from({length:(business?.admin_pin||"1234").length}).map((_,i) => (
-            <div key={i} className={`pin-dot ${i<pinInput.length?"filled":""}`}/>
-          ))}
-        </div>
-        {pinError && <div className="pin-error">{pinError}</div>}
-        <div className="pin-grid">
-          {["1","2","3","4","5","6","7","8","9","del","0"].map(k => (
-            <button key={k} className={`pin-key ${k==="0"?"zero":""} ${k==="del"?"del":""}`} onClick={() => handlePinKey(k)}>
-              {k==="del"?"⌫":k}
-            </button>
-          ))}
-        </div>
+        <div className="login-title">{business?.name || "Sonkhela Soft Loans"}</div>
+        <div className="login-sub">Admin Login</div>
+        <form onSubmit={handleLogin} style={{display:"flex",flexDirection:"column",gap:12,marginTop:18}}>
+          <input
+            className="login-input"
+            type="email"
+            autoComplete="username"
+            placeholder="Email"
+            value={loginEmail}
+            onChange={e => { setLoginEmail(e.target.value); setPinError(""); }}
+          />
+          <input
+            className="login-input"
+            type="password"
+            autoComplete="current-password"
+            placeholder="Password"
+            value={loginPassword}
+            onChange={e => { setLoginPassword(e.target.value); setPinError(""); }}
+          />
+          {pinError && <div className="pin-error">{pinError}</div>}
+          <button type="submit" className="login-submit" disabled={loggingIn}>
+            {loggingIn ? "Signing in..." : "Sign In"}
+          </button>
+        </form>
       </div>
     </div></>
   );
@@ -294,7 +337,7 @@ export default function App() {
           <button className="dark-toggle" onClick={() => setDarkMode(d => !d)}>
             {darkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}
           </button>
-          <button className="logout-btn" onClick={() => {setScreen("login");setPinInput("");}}>🔒 Lock / Logout</button>
+          <button className="logout-btn" onClick={handleLogout}>🔒 Logout</button>
         </div>
       </aside>
 
@@ -363,7 +406,7 @@ function StorageImg({ path, label }) {
   useEffect(() => {
     if (!path) return;
     let alive = true;
-    fetch("/api/storage-url", {
+    authFetch("/api/storage-url", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path }),
@@ -386,7 +429,7 @@ function StorageImg({ path, label }) {
 
 function notifyApplicant(type, applicationId, extra = {}) {
   // Fire-and-forget email; failures are logged but never block the admin action.
-  return fetch("/api/application-decision", {
+  return authFetch("/api/application-decision", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ type, applicationId, ...extra }),
@@ -772,7 +815,7 @@ function ClientsPage({ loans, setLoans, settled, setSettled, showToast, business
     if (!loan.client_email) { showToast("This client has no email.","error"); return; }
     setSendingEmail(loan.id);
     try {
-      const res = await fetch("/api/send-reminder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({loanId:loan.id})});
+      const res = await authFetch("/api/send-reminder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({loanId:loan.id})});
       const d = await res.json();
       if (d.success) showToast(`✉️ Reminder sent to ${loan.client_email}`);
       else showToast(d.error||"Email failed.","error");
@@ -1115,6 +1158,8 @@ function SummaryPage({ loans, settled }) {
 function SettingsPage({ business, setBusiness, showToast }) {
   const [f, setF] = useState({...business});
   const [saving, setSaving] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [changingPw, setChangingPw] = useState(false);
   const set = (k,v) => setF(p=>({...p,[k]:v}));
 
   const uploadImage = (key,e) => {
@@ -1128,7 +1173,7 @@ function SettingsPage({ business, setBusiness, showToast }) {
     setSaving(true);
     const { error } = await supabase.from("business").update({
       name:f.name,tagline:f.tagline,phone:f.phone,email:f.email,
-      address:f.address,admin_pin:f.admin_pin,logo:f.logo,signature:f.signature,
+      address:f.address,logo:f.logo,signature:f.signature,
     }).eq("id",1);
     setSaving(false);
     if (error) { showToast("Failed to save.","error"); return; }
@@ -1176,9 +1221,19 @@ function SettingsPage({ business, setBusiness, showToast }) {
             <div className="card-head"><div className="card-title">🔐 Security</div></div>
             <div className="card-body">
               <div className="form-group">
-                <label>Admin PIN</label>
-                <input type="password" maxLength={6} value={f.admin_pin||""} onChange={e=>set("admin_pin",e.target.value)} placeholder="4–6 digits"/>
+                <label>Change Login Password</label>
+                <input type="password" autoComplete="new-password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="New password (min 8 characters)"/>
               </div>
+              <button className="btn btn-outline btn-sm" style={{width:"100%"}} disabled={changingPw || newPassword.length < 8} onClick={async () => {
+                setChangingPw(true);
+                const { error } = await supabase.auth.updateUser({ password: newPassword });
+                setChangingPw(false);
+                if (error) { showToast("Failed to change password: " + error.message, "error"); return; }
+                setNewPassword("");
+                showToast("Password changed ✓");
+              }}>
+                {changingPw ? "Updating..." : "Update Password"}
+              </button>
             </div>
           </div>
           <button className="btn btn-green" style={{width:"100%",padding:"13px"}} onClick={handleSave} disabled={saving}>
