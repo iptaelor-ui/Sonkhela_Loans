@@ -51,14 +51,11 @@ export default function AgreementPage() {
   useEffect(() => { if (!id) return; loadData(); }, [id]);
 
   const loadData = async () => {
-    const [loanRes, bizRes] = await Promise.all([
-      supabase.from("loans").select("*").eq("id", id).single(),
-      supabase.from("business").select("*").eq("id", 1).single(),
-    ]);
-    if (loanRes.error || !loanRes.data) { setStatus("notfound"); return; }
-    setLoan(loanRes.data);
-    setBusiness(bizRes.data);
-    if (loanRes.data.client_signature) setSigSaved(true);
+    const { data, error } = await supabase.rpc("get_agreement", { p_id: id });
+    if (error || !data || !data.loan) { setStatus("notfound"); return; }
+    setLoan(data.loan);
+    setBusiness(data.business);
+    if (data.loan.client_signature) setSigSaved(true);
     setStatus("found");
   };
 
@@ -132,8 +129,8 @@ export default function AgreementPage() {
     setSubmittingSig(true);
     const canvas = canvasRef.current;
     const sigData = canvas.toDataURL("image/png");
-    const { error } = await supabase.from("loans").update({ client_signature: sigData }).eq("id", id);
-    if (error) { setSigToast("Failed to save signature. Please try again."); setSubmittingSig(false); return; }
+    const { data: ok, error } = await supabase.rpc("sign_agreement", { p_id: id, p_signature: sigData });
+    if (error || !ok) { setSigToast("Failed to save signature. Please try again."); setSubmittingSig(false); return; }
     setLoan(p => ({ ...p, client_signature: sigData }));
     setSigSaved(true);
     setSigToast("✓ Signature submitted successfully!");
