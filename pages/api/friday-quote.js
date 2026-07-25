@@ -80,11 +80,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Fetch phone numbers from active loans
-    const { data: activeLoans } = await supabase
+    // Fetch phone numbers from EVERY loan, regardless of status
+    // (active, overdue, cancelled, written-off, or any other status)
+    const { data: allLoans } = await supabase
       .from("loans")
-      .select("client_phone, client_name")
-      .eq("status", "active");
+      .select("client_phone, client_name");
 
     // Fetch phone numbers from settled loans
     const { data: settledLoans } = await supabase
@@ -92,7 +92,7 @@ export default async function handler(req, res) {
       .select("client_phone, client_name");
 
     // Combine all records
-    const allRecords = [...(activeLoans || []), ...(settledLoans || [])];
+    const allRecords = [...(allLoans || []), ...(settledLoans || [])];
 
     // ── DEDUPLICATION ──────────────────────────────────────────────
     // Build a Map keyed by phone number — first occurrence wins
