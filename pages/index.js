@@ -386,6 +386,7 @@ const APP_STATUSES = [
   { id: "under_review", label: "Under Review", icon: "🔍" },
   { id: "approved", label: "Approved", icon: "✅" },
   { id: "rejected", label: "Rejected", icon: "❌" },
+  { id: "cancelled", label: "Cancelled", icon: "🚫" },
 ];
 
 const LOAN_TYPE_NAMES = {
@@ -474,6 +475,13 @@ function ApplicationsPage({ applications, setApplications, loans, setLoans, show
     else if (app.email) showToast("Request sent to applicant ✓");
   };
 
+  const handleCancel = async (app) => {
+    if (!confirm(`Cancel ${app.full_name}'s application? No email will be sent.`)) return;
+    if (!(await updateApp(app.id, { status: "cancelled" }))) return;
+    showToast("Application cancelled.");
+    setDetail(null);
+  };
+
   // Approve: open the existing LoanModal pre-filled from the application.
   const startApprove = (app) => {
     const weeks = Number(app.repayment_period) || 1;
@@ -548,6 +556,7 @@ function ApplicationsPage({ applications, setApplications, loans, setLoans, show
                     <td style={{textAlign:"right",whiteSpace:"nowrap"}}>
                       {tab === "approved" && app.loan_id && <CopyLinkBtn loanId={app.loan_id} showToast={showToast}/>}
                       <button className="btn btn-outline btn-xs" style={{marginLeft:6}} onClick={() => setDetail(app)}>View</button>
+                      {(tab === "pending" || tab === "under_review") && <button className="btn btn-red btn-xs" style={{marginLeft:6}} onClick={() => handleCancel(app)}>Cancel</button>}
                     </td>
                   </tr>
                 ))}
@@ -760,6 +769,7 @@ function ClientsPage({ loans, setLoans, settled, setSettled, showToast, business
   const [filter, setFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
+  const [dupPrefill, setDupPrefill] = useState(null);
   const [saving, setSaving] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(null);
 
@@ -775,6 +785,17 @@ function ClientsPage({ loans, setLoans, settled, setSettled, showToast, business
     await supabase.from("loans").delete().eq("id", id);
     setLoans(p => p.filter(l => l.id!==id));
     showToast("Agreement deleted.");
+  };
+
+  const duplicateLoan = async (loan) => {
+    const { data } = await supabase.from("loans").select("*").eq("id", loan.id).single();
+    const source = data || loan;
+    const { id, created_at, ...copy } = source;
+    copy.status = "active";
+    copy.processing_date = new Date().toISOString().slice(0, 10);
+    setEditTarget(null);
+    setDupPrefill(copy);
+    setShowModal(true);
   };
 
   const updateStatus = async (id, status) => {
@@ -876,7 +897,9 @@ function ClientsPage({ loans, setLoans, settled, setSettled, showToast, business
                     </td>
                     <td>
                       <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-<button className="btn btn-ghost btn-xs" onClick={async () => { const { data } = await supabase.from("loans").select("*").eq("id", loan.id).single(); setEditTarget(data || loan); setShowModal(true); }}>Edit</button>                        {loan.client_email && <button className="btn btn-blue btn-xs" disabled={sendingEmail===loan.id} onClick={() => sendReminder(loan)}>{sendingEmail===loan.id?"...":"📧"}</button>}
+                        <button className="btn btn-ghost btn-xs" onClick={() => duplicateLoan(loan)}>⧉</button>
+                        <button className="btn btn-ghost btn-xs" onClick={async () => { const { data } = await supabase.from("loans").select("*").eq("id", loan.id).single(); setEditTarget(data || loan); setShowModal(true); }}>Edit</button>
+                        {loan.client_email && <button className="btn btn-blue btn-xs" disabled={sendingEmail===loan.id} onClick={() => sendReminder(loan)}>{sendingEmail===loan.id?"...":"📧"}</button>}
                         <button className="btn btn-red btn-xs" onClick={() => deleteLoan(loan.id)}>✕</button>
                       </div>
                     </td>
@@ -887,7 +910,7 @@ function ClientsPage({ loans, setLoans, settled, setSettled, showToast, business
           </table>
         </div>
       </div>
-      {showModal && <LoanModal loan={editTarget} saving={saving} onClose={() => setShowModal(false)} onSave={handleSave}/>}
+      {showModal && <LoanModal loan={editTarget || dupPrefill} saving={saving} onClose={() => {setShowModal(false); setDupPrefill(null);}} onSave={handleSave}/>}
     </>
   );
 }
@@ -1092,155 +1115,4 @@ function NotificationsPage({ loans, showToast }) {
         </div>
         <div className="stat-card blue">
           <div className="stat-label">Due This Week</div>
-          <div className="stat-value">{due3Loans.length + due7Loans.length}</div>
-          <div className="stat-sub">within 7 days</div>
-        </div>
-      </div>
-      <NotifSection title="🚨 Overdue Loans" color="#c0392b" borderColor="#c0392b" loans={overdueLoans} showToast={showToast}/>
-      <NotifSection title="⏰ Due Today" color="#d97706" borderColor="#d97706" loans={dueTodayLoans} showToast={showToast}/>
-      <NotifSection title="⚠️ Due in 1–3 Days" color="#d97706" borderColor="#f59e0b" loans={due3Loans} showToast={showToast}/>
-      <NotifSection title="📅 Due in 4–7 Days" color="#2563eb" borderColor="#2563eb" loans={due7Loans} showToast={showToast}/>
-    </>
-  );
-}
-
-// ── Monthly Summary ────────────────────────────────────────────────────────────
-function SummaryPage({ loans, settled }) {
-  const allLoans = [...loans, ...settled];
-
-  const monthlyData = {};
-  allLoans.forEach(l => {
-    const date = new Date((l.processing_date || l.settled_at || "")+"T00:00:00");
-    if (isNaN(date)) return;
-    const key = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}`;
-    if (!monthlyData[key]) monthlyData[key] = { issued:0, interest:0, salary:0, count:0, settled:0, settledInterest:0 };
-    monthlyData[key].issued += Number(l.amount||0);
-    monthlyData[key].interest += Number(l.amount||0)*Number(l.interest_rate||0)/100;
-    monthlyData[key].salary += (Number(l.amount||0)*Number(l.interest_rate||0)/100)*0.30;
-    monthlyData[key].count += 1;
-    if (l.settled_at || l.status==="settled") {
-      monthlyData[key].settled += 1;
-      monthlyData[key].settledInterest += Number(l.interest||Number(l.amount||0)*Number(l.interest_rate||0)/100);
-    }
-  });
-
-  const months = Object.keys(monthlyData).sort().reverse();
-  const monthName = (key) => { const [y,m] = key.split("-"); return new Date(y,m-1).toLocaleDateString("en-GB",{month:"long",year:"numeric"}); };
-
-  return (
-    <>
-      <div style={{marginBottom:"1.25rem"}}>
-        <h1 style={{fontFamily:"'Lora',serif",fontSize:"1.5rem",fontWeight:700,marginBottom:4}}>📈 Monthly Summary</h1>
-        <p style={{color:"var(--muted)",fontSize:"0.85rem"}}>Breakdown of loan activity by month.</p>
-      </div>
-      {months.length === 0 && <div style={{textAlign:"center",color:"var(--muted)",padding:"3rem"}}>No data yet.</div>}
-      <div className="month-grid">
-        {months.map(key => {
-          const d = monthlyData[key];
-          return (
-            <div key={key} className="month-card">
-              <div className="month-name">{monthName(key)}</div>
-              <div className="month-row"><span>Loans Issued</span><span style={{fontWeight:700}}>{d.count}</span></div>
-              <div className="month-row"><span>Total Issued</span><span style={{fontWeight:700}}>{fmt(d.issued)}</span></div>
-              <div className="month-row"><span>Interest Expected</span><span style={{fontWeight:700,color:"#0891b2"}}>{fmt(d.interest)}</span></div>
-              <div className="month-row"><span>Settled</span><span style={{fontWeight:700}}>{d.settled} loan{d.settled!==1?"s":""}</span></div>
-              <div className="month-row"><span>Interest Collected</span><span style={{fontWeight:700,color:"#145f39"}}>{fmt(d.settledInterest)}</span></div>
-              <div className="month-row"><span>💼 Salary (30%)</span><span style={{fontWeight:800,color:"#7c3aed"}}>{fmt(d.salary)}</span></div>
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
-// ── Settings ───────────────────────────────────────────────────────────────────
-function SettingsPage({ business, setBusiness, showToast }) {
-  const [f, setF] = useState({...business});
-  const [saving, setSaving] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
-  const [changingPw, setChangingPw] = useState(false);
-  const set = (k,v) => setF(p=>({...p,[k]:v}));
-
-  const uploadImage = (key,e) => {
-    const file = e.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => set(key,ev.target.result);
-    reader.readAsDataURL(file);
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    const { error } = await supabase.from("business").update({
-      name:f.name,tagline:f.tagline,phone:f.phone,email:f.email,
-      address:f.address,logo:f.logo,signature:f.signature,
-    }).eq("id",1);
-    setSaving(false);
-    if (error) { showToast("Failed to save.","error"); return; }
-    setBusiness(f); showToast("Settings saved! ✓");
-  };
-
-  return (
-    <>
-      <div style={{marginBottom:"1.25rem"}}>
-        <h1 style={{fontFamily:"'Lora',serif",fontSize:"1.5rem",fontWeight:700,marginBottom:4}}>Settings</h1>
-        <p style={{color:"var(--muted)",fontSize:"0.85rem"}}>Manage your profile, signature and security</p>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1.5rem"}}>
-        <div className="card">
-          <div className="card-head"><div className="card-title">🏢 Business Profile</div></div>
-          <div className="card-body" style={{display:"flex",flexDirection:"column",gap:"1rem"}}>
-            <div className="form-group">
-              <label>Business Logo</label>
-              <div className="upload-area" onClick={() => document.getElementById("logoUpload").click()}>
-                {f.logo?<img className="upload-preview-round" src={f.logo} alt="logo"/>:<div style={{fontSize:"2rem",marginBottom:6}}>🏢</div>}
-                <div style={{fontSize:"0.76rem",color:"var(--muted)",fontWeight:700}}>Click to upload logo</div>
-              </div>
-              <input id="logoUpload" type="file" accept="image/*" style={{display:"none"}} onChange={e=>uploadImage("logo",e)}/>
-            </div>
-            <div className="form-group"><label>Business Name</label><input value={f.name||""} onChange={e=>set("name",e.target.value)}/></div>
-            <div className="form-group"><label>Tagline</label><input value={f.tagline||""} onChange={e=>set("tagline",e.target.value)}/></div>
-            <div className="form-group"><label>Phone</label><input value={f.phone||""} onChange={e=>set("phone",e.target.value)}/></div>
-            <div className="form-group"><label>Email</label><input value={f.email||""} onChange={e=>set("email",e.target.value)}/></div>
-            <div className="form-group"><label>Address</label><input value={f.address||""} onChange={e=>set("address",e.target.value)}/></div>
-          </div>
-        </div>
-        <div style={{display:"flex",flexDirection:"column",gap:"1.5rem"}}>
-          <div className="card">
-            <div className="card-head"><div className="card-title">✍️ Your Signature</div></div>
-            <div className="card-body">
-              <div className="upload-area" onClick={() => document.getElementById("sigUpload").click()}>
-                {f.signature?<img className="upload-preview" src={f.signature} alt="sig"/>:<div style={{fontSize:"2rem",marginBottom:6}}>✍️</div>}
-                <div style={{fontSize:"0.76rem",color:"var(--muted)",fontWeight:700}}>{f.signature?"Click to change":"Click to upload signature"}</div>
-              </div>
-              <input id="sigUpload" type="file" accept="image/*" style={{display:"none"}} onChange={e=>uploadImage("signature",e)}/>
-              {f.signature&&<button className="btn btn-ghost btn-sm" style={{marginTop:"0.75rem",width:"100%"}} onClick={()=>set("signature",null)}>Remove</button>}
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-head"><div className="card-title">🔐 Security</div></div>
-            <div className="card-body">
-              <div className="form-group">
-                <label>Change Login Password</label>
-                <input type="password" autoComplete="new-password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="New password (min 8 characters)"/>
-              </div>
-              <button className="btn btn-outline btn-sm" style={{width:"100%"}} disabled={changingPw || newPassword.length < 8} onClick={async () => {
-                setChangingPw(true);
-                const { error } = await supabase.auth.updateUser({ password: newPassword });
-                setChangingPw(false);
-                if (error) { showToast("Failed to change password: " + error.message, "error"); return; }
-                setNewPassword("");
-                showToast("Password changed ✓");
-              }}>
-                {changingPw ? "Updating..." : "Update Password"}
-              </button>
-            </div>
-          </div>
-          <button className="btn btn-green" style={{width:"100%",padding:"13px"}} onClick={handleSave} disabled={saving}>
-            {saving?"Saving...":"💾 Save All Settings"}
-          </button>
-        </div>
-      </div>
-    </>
-  );
-}
+          <div className="stat-value">{due3Loans.length +
