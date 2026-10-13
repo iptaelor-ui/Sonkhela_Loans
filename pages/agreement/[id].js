@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import { supabase, fmt, fmtDate, calcLoan, isOverdue, AGR_STYLES } from "../shared";
+import { supabase, fmt, fmtDate, calcLoan, isOverdue, installmentInfo, AGR_STYLES } from "../shared";
 
 const PAGE_STYLES = `
 ${AGR_STYLES}
@@ -144,9 +144,7 @@ export default function AgreementPage() {
       const { buildAgreementPdf } = await import("../../lib/agreementPdf");
       const calc = calcLoan(loan.amount, loan.interest_rate, loan.repayment);
       const schedMap = { weekly:"Weekly", monthly:"Monthly", "lump-sum":"Lump Sum" };
-      const instLabel = loan.repayment !== "lump-sum"
-        ? `${fmt(calc.installment)} / ${loan.repayment==="weekly"?"week":"month"}`
-        : fmt(calc.total) + " (once)";
+      const instLabel = installmentInfo(loan).label;
       await buildAgreementPdf({
         loan, business, calc,
         displayStatus: isOverdue(loan) ? "overdue" : loan.status,
@@ -164,9 +162,7 @@ export default function AgreementPage() {
   const over = isOverdue(loan);
   const displayStatus = over ? "overdue" : loan.status;
   const schedMap = { weekly:"Weekly", monthly:"Monthly", "lump-sum":"Lump Sum" };
-  const instLabel = loan.repayment !== "lump-sum"
-    ? `${fmt(calc.installment)} / ${loan.repayment==="weekly"?"week":"month"}`
-    : fmt(calc.total) + " (once)";
+  const instLabel = installmentInfo(loan).label;
 
   return (
     <><style>{PAGE_STYLES}</style>

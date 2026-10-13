@@ -14,6 +14,23 @@ export const calcLoan = (amount, rate, repayment) => {
   const installment = repayment === "weekly" ? total / 4 : repayment === "monthly" ? total / 3 : total;
   return { principal, interest, total, installment };
 };
+// Installment based on the real loan period (processing date -> due date),
+// instead of a fixed 3 months / 4 weeks.
+export const installmentInfo = (loan) => {
+  const { total } = calcLoan(loan.amount, loan.interest_rate, loan.repayment);
+  const start = loan.processing_date ? new Date(loan.processing_date + "T00:00:00") : null;
+  const end = loan.due_date ? new Date(loan.due_date + "T00:00:00") : null;
+  const days = start && end ? Math.max(0, Math.round((end - start) / 86400000)) : 0;
+  let count = 1;
+  if (loan.repayment === "weekly") count = Math.max(1, Math.round(days / 7));
+  else if (loan.repayment === "monthly") count = Math.max(1, Math.round(days / 30));
+  const amount = total / count;
+  const unit = loan.repayment === "weekly" ? "week" : "month";
+  const label = count === 1
+    ? `${fmt(total)} (one payment)`
+    : `${fmt(amount)} / ${unit} (${count} payments)`;
+  return { count, amount, label };
+};
 export const isOverdue = (loan) => loan.status === "active" && loan.due_date && new Date(loan.due_date + "T00:00:00") < new Date();
 export const genId = () => {
   // Unguessable ID: ~1 trillion combinations (was only 900 — enumerable).
