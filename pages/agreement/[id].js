@@ -141,19 +141,19 @@ export default function AgreementPage() {
   const downloadPDF = async () => {
     setDownloading(true);
     try {
-      const html2canvas = (await import("html2canvas")).default;
-      const { jsPDF } = await import("jspdf");
-      const el = docRef.current;
-      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false });
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pw = pdf.internal.pageSize.getWidth();
-      const ph = pdf.internal.pageSize.getHeight();
-      const ih = (canvas.height * pw) / canvas.width;
-      if (ih <= ph) { pdf.addImage(imgData, "PNG", 0, 0, pw, ih); }
-      else { let y = 0; while (y < ih) { if (y > 0) pdf.addPage(); pdf.addImage(imgData, "PNG", 0, -y, pw, ih); y += ph; } }
-      pdf.save(`Sonkhela_${loan.id}_${(loan.client_name||"Client").replace(/\s+/g,"_")}.pdf`);
-    } catch(err) { alert("PDF generation failed. Please try again."); }
+      const { buildAgreementPdf } = await import("../../lib/agreementPdf");
+      const calc = calcLoan(loan.amount, loan.interest_rate, loan.repayment);
+      const schedMap = { weekly:"Weekly", monthly:"Monthly", "lump-sum":"Lump Sum" };
+      const instLabel = loan.repayment !== "lump-sum"
+        ? `${fmt(calc.installment)} / ${loan.repayment==="weekly"?"week":"month"}`
+        : fmt(calc.total) + " (once)";
+      await buildAgreementPdf({
+        loan, business, calc,
+        displayStatus: isOverdue(loan) ? "overdue" : loan.status,
+        schedLabel: schedMap[loan.repayment] || loan.repayment,
+        instLabel, fmt, fmtDate,
+      });
+    } catch(err) { console.error(err); alert("PDF generation failed. Please try again."); }
     setDownloading(false);
   };
 
@@ -220,7 +220,7 @@ export default function AgreementPage() {
           <div className="agr-section-title">🔒 Collateral Held</div>
           <div className="agr-grid">
             <div className="agr-cell full"><div className="agr-cell-label">Item / Description</div><div className="agr-cell-value">{loan.collateral}</div></div>
-            {loan.collateral_value && <div className="agr-cell"><div className="agr-cell-label">Estimated Value</div><div className="agr-cell-value">{fmt(loan.collateral_value)}</div></div>}
+            {Number(loan.collateral_value) > 0 && <div className="agr-cell"><div className="agr-cell-label">Estimated Value</div><div className="agr-cell-value">{fmt(loan.collateral_value)}</div></div>}
             {loan.collateral_photo && (
               <div className="agr-cell full">
                 <div className="agr-cell-label">Collateral Photo</div>
