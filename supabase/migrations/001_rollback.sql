@@ -11,11 +11,11 @@ begin
   end loop;
 end $$;
 
-drop function if exists public.tenant_has_feature(uuid, text);
-drop function if exists public.default_tenant_id();
-drop function if exists public.auth_tenant_id();
 drop table if exists public.tenant_users;
 drop table if exists public.tenants;
 drop table if exists public.packages;
+drop function if exists public.tenant_has_feature(uuid, text);
+drop function if exists public.default_tenant_id();
+drop function if exists public.auth_tenant_id();
 
 commit;
