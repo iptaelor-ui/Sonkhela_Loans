@@ -222,7 +222,8 @@ export default function App() {
   }, [darkMode]);
 
   const loadBusiness = async () => {
-    const { data } = await supabase.from("business").select("*").eq("id", 1).single();
+    // RLS limits a logged-in user to their own business row; before login this is Sonkhela's.
+    const { data } = await supabase.from("business").select("*").order("id").limit(1).maybeSingle();
     setBusiness(data || { name:"Sonkhela Soft Loans", tagline:"Simple Loans. Real People.", phone:"", email:"", address:"", logo:null, signature:null });
   };
 
@@ -1196,7 +1197,7 @@ function SettingsPage({ business, setBusiness, showToast }) {
     const { error } = await supabase.from("business").update({
       name:f.name,tagline:f.tagline,phone:f.phone,email:f.email,
       address:f.address,logo:f.logo,signature:f.signature,
-    }).eq("id",1);
+    }).eq("id",business.id ?? 1);
     setSaving(false);
     if (error) { showToast("Failed to save.","error"); return; }
     setBusiness(f); showToast("Settings saved! ✓");

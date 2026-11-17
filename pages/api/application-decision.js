@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { requireAdmin, serviceClient } from "../../lib/serverAuth";
+import { getTenantContext, serviceClient } from "../../lib/serverAuth";
 
 
 const fmtK = (n) => "K " + Number(n).toLocaleString("en", { minimumFractionDigits: 2 });
@@ -7,16 +7,16 @@ const fmtK = (n) => "K " + Number(n).toLocaleString("en", { minimumFractionDigit
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const admin = await requireAdmin(req);
-  if (!admin) return res.status(401).json({ error: "Unauthorized" });
+  const ctx = await getTenantContext(req);
+  if (!ctx) return res.status(401).json({ error: "Unauthorized" });
   const supabase = serviceClient();
   const { type, applicationId, note, loanId, agreementUrl } = req.body || {};
   if (!type || !applicationId) return res.status(400).json({ error: "type and applicationId required" });
   if (!["approved", "rejected", "more_info"].includes(type)) return res.status(400).json({ error: "Invalid type" });
 
   const [appRes, bizRes] = await Promise.all([
-    supabase.from("applications").select("*").eq("id", applicationId).single(),
-    supabase.from("business").select("*").eq("id", 1).single(),
+    supabase.from("applications").select("*").eq("id", applicationId).eq("tenant_id", ctx.tenantId).single(),
+    supabase.from("business").select("*").eq("tenant_id", ctx.tenantId).order("id").limit(1).maybeSingle(),
   ]);
   if (appRes.error || !appRes.data) return res.status(404).json({ error: "Application not found" });
 

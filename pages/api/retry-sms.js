@@ -1,7 +1,7 @@
 // pages/api/retry-sms.js
 import { createClient } from "@supabase/supabase-js";
 const { sendSMS } = require("../../lib/sms");
-import { requireAdmin } from "../../lib/serverAuth";
+import { getTenantContext } from "../../lib/serverAuth";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -13,8 +13,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const admin = await requireAdmin(req);
-  if (!admin) return res.status(401).json({ error: "Unauthorized" });
+  const ctx = await getTenantContext(req);
+  if (!ctx) return res.status(401).json({ error: "Unauthorized" });
 
   const { log_id } = req.body;
   if (!log_id) return res.status(400).json({ error: "log_id required" });
@@ -24,6 +24,7 @@ export default async function handler(req, res) {
     .from("sms_logs")
     .select("*")
     .eq("id", log_id)
+    .eq("tenant_id", ctx.tenantId)
     .single();
 
   if (fetchErr || !log) {

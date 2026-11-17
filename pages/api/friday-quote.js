@@ -5,6 +5,7 @@
 // Triggered by cron-job.org every Friday
 
 import { createClient } from "@supabase/supabase-js";
+import { SONKHELA_TENANT_ID } from "../../lib/serverAuth";
 import { sendSMS } from "../../lib/sms";
 
 const supabase = createClient(
@@ -133,11 +134,13 @@ export default async function handler(req, res) {
     // Fetch phone numbers from EVERY loan, regardless of status
     const { data: allLoans } = await supabase
       .from("loans")
-      .select("client_phone, client_name");
+      .select("client_phone, client_name")
+      .eq("tenant_id", SONKHELA_TENANT_ID); // Sonkhela's borrowers only
 
     const { data: settledLoans } = await supabase
       .from("settled_loans")
-      .select("client_phone, client_name");
+      .select("client_phone, client_name")
+      .eq("tenant_id", SONKHELA_TENANT_ID);
 
     const allRecords = [...(allLoans || []), ...(settledLoans || [])];
 

@@ -8,6 +8,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { sendSMS } from "../../lib/sms";
+import { SONKHELA_TENANT_ID } from "../../lib/serverAuth";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -30,6 +31,9 @@ export default async function handler(req, res) {
   const { data: loans, error } = await supabase
     .from("loans")
     .select("client_name, client_phone, amount, due_date, status")
+    // Only Sonkhela's own borrowers. Other businesses get reminders through
+    // their own SMS account once feature gating (step 4) is built.
+    .eq("tenant_id", SONKHELA_TENANT_ID)
     .not("status", "eq", "settled")
     .not("client_phone", "is", null);
 
