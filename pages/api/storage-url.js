@@ -8,17 +8,20 @@ export default async function handler(req, res) {
 
   const ctx = await getTenantContext(req);
   if (!ctx) return res.status(401).json({ error: "Unauthorized" });
-  // Collateral/NRC uploads currently come only from sonkhela.com applications.
-  // Per-business folders arrive with the per-portal apply pages (step 3).
-  if (ctx.tenantId !== SONKHELA_TENANT_ID) return res.status(403).json({ error: "Forbidden" });
 
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceKey) return res.status(500).json({ error: "Add SUPABASE_SERVICE_ROLE_KEY to Vercel environment variables." });
 
   const { path } = req.body || {};
   if (!path || typeof path !== "string") return res.status(400).json({ error: "path required" });
-  // Only allow paths inside the folders the website writes to.
-  if (!/^(collateral|nrc)\/[\w.\-]+$/.test(path)) return res.status(400).json({ error: "Invalid path" });
+  // Sonkhela's website uploads to collateral/ and nrc/.
+  // Client portals upload to t/<their business id>/collateral|nrc/, and a business
+  // can only open files in its own folder.
+  const sonkhelaPath = /^(collateral|nrc)\/[\w.\-]+$/.test(path);
+  const tenantPath = new RegExp(`^t/${ctx.tenantId}/(collateral|nrc)/[\\w.\\-]+$`).test(path);
+  if (!(tenantPath || (sonkhelaPath && ctx.tenantId === SONKHELA_TENANT_ID))) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
 
   const supabase = createClient("https://zxxdvxzgqynkuveipxqc.supabase.co", serviceKey);
   const { data, error } = await supabase.storage.from("loan-documents").createSignedUrl(path, 3600);

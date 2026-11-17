@@ -84,7 +84,7 @@ export default async function handler(req, res) {
       const password = tempPassword();
       const { data: u, error } = await svc.auth.admin.updateUserById(owner.id, { password });
       if (error) return res.status(500).json({ error: error.message });
-      return res.status(200).json({ ok: true, login: { url: "https://admin.sonkhela.com", email: u.user.email, password } });
+      return res.status(200).json({ ok: true, login: { url: `https://${t.slug}.sonkhela.com`, email: u.user.email, password } });
     }
 
     case "delete": {

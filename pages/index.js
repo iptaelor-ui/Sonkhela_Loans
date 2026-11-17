@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase, fmt, fmtDate, isOverdue, genId, authFetch, AGR_STYLES } from "./shared";
+import { currentPortalSlug } from "../lib/portal";
 
 const ADMIN_STYLES = `
 ${AGR_STYLES}
@@ -222,6 +223,20 @@ export default function App() {
   }, [darkMode]);
 
   const loadBusiness = async () => {
+    // On a client portal (e.g. copperbelt.sonkhela.com) show that business's
+    // name and logo on the login screen.
+    const slug = currentPortalSlug();
+    if (slug) {
+      const { data: s } = await supabase.auth.getSession();
+      if (!s?.session) {
+        const r = await fetch(`/api/portal?portal=${encodeURIComponent(slug)}`).catch(() => null);
+        if (r?.ok) {
+          const p = await r.json();
+          setBusiness({ name:p.name, tagline:p.tagline, phone:p.phone, email:p.email, address:p.address, logo:p.logo, signature:null });
+          return;
+        }
+      }
+    }
     // RLS limits a logged-in user to their own business row; before login this is Sonkhela's.
     const { data } = await supabase.from("business").select("*").order("id").limit(1).maybeSingle();
     setBusiness(data || { name:"Sonkhela Soft Loans", tagline:"Simple Loans. Real People.", phone:"", email:"", address:"", logo:null, signature:null });
@@ -265,6 +280,7 @@ export default function App() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setLoginPassword("");
+    await loadBusiness();
     setScreen("login");
   };
 
@@ -280,7 +296,7 @@ export default function App() {
     { id:"settings", icon:"⚙️", label:"Settings" },
   ];
 
-  if (screen === "loading") return (<><style>{ADMIN_STYLES}</style><div className="loading-screen"><div className="loading-spinner"/><div className="loading-text">Loading Sonkhela Soft Loans...</div></div></>);
+  if (screen === "loading") return (<><style>{ADMIN_STYLES}</style><div className="loading-screen"><div className="loading-spinner"/><div className="loading-text">Loading{business?.name ? " " + business.name : ""}...</div></div></>);
 
   if (screen === "login") return (
     <><style>{ADMIN_STYLES}</style>
@@ -992,7 +1008,7 @@ function RecordsPage({ settled, setSettled, showToast }) {
     const csv = [headers,...rows].map(r=>r.map(c=>`"${c}"`).join(",")).join("\n");
     const blob = new Blob([csv],{type:"text/csv"});
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href=url; a.download="Sonkhela_Settled_Records.csv"; a.click();
+    const a = document.createElement("a"); a.href=url; a.download="Settled_Records.csv"; a.click();
     showToast("✓ CSV downloaded!");
   };
 

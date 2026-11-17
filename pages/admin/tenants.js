@@ -24,6 +24,7 @@ export default function TenantsPanel() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState("");
   const [creds, setCreds] = useState(null); // login details to hand to a client
+  const [setup, setSetup] = useState(null); // portal setup steps for a client
   const [toast, setToast] = useState("");
   const [filter, setFilter] = useState("all");
 
@@ -67,7 +68,7 @@ export default function TenantsPanel() {
     const data = await res.json().catch(() => ({}));
     setBusy("");
     if (!res.ok) { flash(data.error || "Could not create client."); return; }
-    setCreds({ business: form.business_name, ...data.login });
+    setCreds({ business: form.business_name, slug: data.slug, ...data.login });
     setForm(EMPTY_FORM);
     setShowForm(false);
     await load();
@@ -91,6 +92,16 @@ export default function TenantsPanel() {
     <Shell>
       {toast && <div className="toast">{toast}</div>}
 
+      {setup && (
+        <div className="overlay" onClick={() => setSetup(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Portal setup: {setup.business_name}</h2>
+            <SetupSteps slug={setup.slug} flash={flash} />
+            <button className="btn ghost" onClick={() => setSetup(null)}>Close</button>
+          </div>
+        </div>
+      )}
+
       {creds && (
         <div className="overlay" onClick={() => setCreds(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -101,6 +112,7 @@ export default function TenantsPanel() {
               <button className="btn" onClick={() => { navigator.clipboard?.writeText(`Sonkhela Loan System\nLogin: ${creds.url}\nEmail: ${creds.email}\nPassword: ${creds.password}`); flash("Copied"); }}>Copy</button>
               <button className="btn ghost" onClick={() => setCreds(null)}>Done</button>
             </div>
+            {creds.slug && <><hr /><h2>Before you send them: set up the portal</h2><SetupSteps slug={creds.slug} flash={flash} /></>}
           </div>
         </div>
       )}
@@ -190,7 +202,7 @@ export default function TenantsPanel() {
         ) : (
           <div className="list">
             {shown.map((t) => (
-              <TenantRow key={t.id} t={t} packages={state.packages} busy={busy === t.id} act={act} setCreds={setCreds} />
+              <TenantRow key={t.id} t={t} packages={state.packages} busy={busy === t.id} act={act} setCreds={setCreds} setSetup={setSetup} />
             ))}
           </div>
         )}
@@ -199,7 +211,7 @@ export default function TenantsPanel() {
   );
 }
 
-function TenantRow({ t, packages, busy, act, setCreds }) {
+function TenantRow({ t, packages, busy, act, setCreds, setSetup }) {
   const [days, setDays] = useState(30);
   const s = STATUS[t.status] || STATUS.cancelled;
   const owner = t.users.find((u) => u.role === "owner");
@@ -212,7 +224,7 @@ function TenantRow({ t, packages, busy, act, setCreds }) {
           <strong>{t.business_name}</strong>
           <span className="pill" style={{ background: s.bg, color: s.fg }}>{s.label}</span>
         </div>
-        <div className="muted small">{t.slug}.sonkhela.com · {t.loan_count} loan{t.loan_count === 1 ? "" : "s"}</div>
+        <div className="muted small"><a href={`https://${t.slug}.sonkhela.com`} target="_blank" rel="noreferrer">{t.slug}.sonkhela.com</a> · <a href={`https://${t.slug}.sonkhela.com/apply`} target="_blank" rel="noreferrer">apply page</a> · {t.loan_count} loan{t.loan_count === 1 ? "" : "s"}</div>
         <div className="muted small">{owner?.email || "no login"}{t.contact_name ? ` · ${t.contact_name}` : ""}{t.contact_phone ? ` · ${t.contact_phone}` : ""}</div>
         <div className={`small ${t.days_left !== null && t.days_left <= 7 ? "warn" : "muted"}`}>
           {t.status === "trial" ? "Trial" : "Paid"} until {fmtDay(t.subscription_end)}{ending ? ` (${ending})` : ""}
@@ -242,6 +254,7 @@ function TenantRow({ t, packages, busy, act, setCreds }) {
             const r = await act({ action: "reset_password", tenantId: t.id });
             if (r?.login) setCreds({ business: t.business_name, ...r.login });
           }}>Reset password</button>
+          <button className="btn small ghost" onClick={() => setSetup(t)}>Portal setup</button>
           {t.loan_count === 0 && (
             <button className="btn small danger" disabled={busy} onClick={() => {
               if (confirm(`Permanently delete ${t.business_name} and its login? Only possible while it has no loans.`)) act({ action: "delete", tenantId: t.id }, "Client deleted");
@@ -250,6 +263,28 @@ function TenantRow({ t, packages, busy, act, setCreds }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function SetupSteps({ slug, flash }) {
+  const host = `${slug}.sonkhela.com`;
+  const copy = (text) => { navigator.clipboard?.writeText(text); flash("Copied: " + text); };
+  return (
+    <ol className="steps">
+      <li>
+        <b>Vercel:</b> open the admin project (the one serving admin.sonkhela.com), go to <b>Settings &gt; Domains</b>, add{" "}
+        <code onClick={() => copy(host)}>{host}</code> and click <b>Add</b>. Vercel then shows a <b>CNAME</b> value. Copy it.
+      </li>
+      <li>
+        <b>Namecheap:</b> Domain List &gt; sonkhela.com &gt; <b>Manage</b> &gt; <b>Advanced DNS</b> &gt; <b>Add new record</b>.
+        Type <b>CNAME Record</b>, Host <code onClick={() => copy(slug)}>{slug}</code>, Value = the CNAME from Vercel, TTL Automatic. Click the green tick.
+      </li>
+      <li>Wait 5 to 30 minutes until Vercel shows <b>Valid Configuration</b> next to the domain.</li>
+      <li>
+        Then the client logs in at <code onClick={() => copy(`https://${host}`)}>https://{host}</code> and borrowers apply at{" "}
+        <code onClick={() => copy(`https://${host}/apply`)}>https://{host}/apply</code>.
+      </li>
+    </ol>
   );
 }
 
@@ -265,7 +300,7 @@ function Shell({ children }) {
   return (
     <>
       <Head><title>Clients · Sonkhela Platform</title><meta name="viewport" content="width=device-width, initial-scale=1" /></Head>
-      <style>{CSS}</style>
+      <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className="wrap">
         <header className="top">
           <div><div className="eyebrow">Sonkhela Platform</div><h1>Client businesses</h1></div>
@@ -325,6 +360,11 @@ input:focus,select:focus{outline:2px solid #1a7a4a33;border-color:#1a7a4a}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0d1f14;color:#fff;padding:10px 18px;border-radius:10px;font-weight:700;font-size:.88rem;z-index:30}
 .overlay{position:fixed;inset:0;background:#0d1f1499;display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
 .modal{background:#fff;border-radius:14px;padding:20px;max-width:440px;width:100%;display:flex;flex-direction:column;gap:12px}
+.steps{padding-left:20px;display:flex;flex-direction:column;gap:8px;font-size:.86rem;line-height:1.5}
+.steps code{background:#f0faf4;border:1px solid #d4e8db;border-radius:5px;padding:1px 6px;cursor:pointer;font-size:.82rem;word-break:break-all}
+.modal hr{border:none;border-top:1px solid #d4e8db}
+.modal{max-height:90vh;overflow:auto}
+.t-main a{color:inherit}
 .creds{background:#f0faf4;border:1px solid #d4e8db;border-radius:8px;padding:12px;font-size:.85rem;white-space:pre-wrap;word-break:break-all}
 @media(max-width:760px){
   .stats{grid-template-columns:repeat(2,1fr)}
