@@ -120,8 +120,9 @@ async function create(svc, req, res) {
       email: b.contact_email || owner_email,
     };
     let { error: bErr } = await svc.from("business").insert(bizRow);
-    if (bErr && bErr.code === "23502") {
-      // business.id has no default: use the next number
+    if (bErr && (bErr.code === "23502" || bErr.code === "23505")) {
+      // business.id has no default (23502), or its counter is behind the
+      // existing rows (23505 duplicate key): use the next free number
       const { data: maxRow } = await svc.from("business").select("id").order("id", { ascending: false }).limit(1).maybeSingle();
       ({ error: bErr } = await svc.from("business").insert({ ...bizRow, id: (maxRow?.id || 0) + 1 }));
     }
