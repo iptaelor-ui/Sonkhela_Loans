@@ -137,6 +137,7 @@ async function create(svc, req, res) {
   return res.status(200).json({
     ok: true,
     tenantId,
-    login: { url: "https://admin.sonkhela.com", email: owner_email, password },
+    slug,
+    login: { url: `https://${slug}.sonkhela.com`, email: owner_email, password },
   });
 }
