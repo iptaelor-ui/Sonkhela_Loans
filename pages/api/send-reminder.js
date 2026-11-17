@@ -1,18 +1,18 @@
 import nodemailer from "nodemailer";
-import { requireAdmin, serviceClient } from "../../lib/serverAuth";
+import { getTenantContext, serviceClient } from "../../lib/serverAuth";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const admin = await requireAdmin(req);
-  if (!admin) return res.status(401).json({ error: "Unauthorized" });
+  const ctx = await getTenantContext(req);
+  if (!ctx) return res.status(401).json({ error: "Unauthorized" });
   const supabase = serviceClient();
   const { loanId } = req.body;
   if (!loanId) return res.status(400).json({ error: "loanId required" });
 
   const [loanRes, bizRes] = await Promise.all([
-    supabase.from("loans").select("*").eq("id", loanId).single(),
-    supabase.from("business").select("*").eq("id", 1).single(),
+    supabase.from("loans").select("*").eq("id", loanId).eq("tenant_id", ctx.tenantId).single(),
+    supabase.from("business").select("*").eq("tenant_id", ctx.tenantId).order("id").limit(1).maybeSingle(),
   ]);
 
   if (loanRes.error || !loanRes.data) return res.status(404).json({ error: "Loan not found" });
