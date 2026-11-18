@@ -410,12 +410,12 @@ export default function App() {
           </div>
         </div>
         <div className="page fade-up" key={activePage}>
-          {activePage==="dashboard" && <Dashboard loans={loans} settled={settled} setActivePage={setActivePage} showToast={showToast} applyUrl={me?.applyUrl}/>}
+          {activePage==="dashboard" && <Dashboard loans={loans} settled={settled} setActivePage={setActivePage} showToast={showToast} applyUrl={me?.applyUrl} business={business}/>}
           {activePage==="applications" && <ApplicationsPage applications={applications} setApplications={setApplications} loans={loans} setLoans={setLoans} showToast={showToast} applyUrl={me?.applyUrl}/>}
           {activePage==="clients" && <ClientsPage loans={loans} setLoans={setLoans} settled={settled} setSettled={setSettled} showToast={showToast} business={business}/>}
           {activePage==="records" && <RecordsPage settled={settled} setSettled={setSettled} showToast={showToast}/>}
           {activePage==="notifications" && <NotificationsPage loans={loans} showToast={showToast}/>}
-          {activePage==="summary" && <SummaryPage loans={loans} settled={settled}/>}
+          {activePage==="summary" && <SummaryPage loans={loans} settled={settled} business={business}/>}
           {activePage==="settings" && <SettingsPage business={business} setBusiness={setBusiness} showToast={showToast}/>}
         </div>
       </div>
@@ -454,6 +454,12 @@ function ShareApplyLink({ url, showToast }) {
     </div>
   );
 }
+
+// Salary share (%) of interest, set per business in Settings (default 30%)
+const salaryRate = (b) => {
+  const r = Number(b?.salary_rate);
+  return b?.salary_rate != null && r >= 0 && r <= 100 ? r : 30;
+};
 
 function CopyLinkBtn({ loanId, showToast }) {
   return <button className="btn btn-link btn-xs" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/agreement/${loanId}`).then(() => showToast("✓ Link copied!")); }}>🔗 Copy</button>;
@@ -734,11 +740,12 @@ function AppDetailModal({ app, onClose, onApprove, onReject, onMoreInfo, showToa
 
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
-function Dashboard({ loans, settled, setActivePage, showToast, applyUrl }) {
+function Dashboard({ loans, settled, setActivePage, showToast, applyUrl, business }) {
   const activeLoans = loans.filter(l => l.status !== "settled");
   const totalIssued = activeLoans.reduce((s,l) => s+Number(l.amount),0);
   const totalInterest = activeLoans.reduce((s,l) => s+(Number(l.amount)*Number(l.interest_rate)/100),0);
-  const salary = totalInterest * 0.30;
+  const rate = salaryRate(business);
+  const salary = totalInterest * rate / 100;
   const active = loans.filter(l => l.status==="active" && !isOverdue(l)).length;
   const overdue = loans.filter(isOverdue).length;
   const settledCount = settled.length;
@@ -790,7 +797,7 @@ function Dashboard({ loans, settled, setActivePage, showToast, applyUrl }) {
           <div className="stat-sub">active & overdue</div>
         </div>
         <div className="stat-card teal">
-          <div className="stat-label">💼 Salary (30%)</div>
+          <div className="stat-label">💼 Salary ({rate}%)</div>
           <div className="stat-value sm">{fmt(salary)}</div>
           <div className="stat-sub">estimated earnings</div>
         </div>
@@ -1210,7 +1217,8 @@ function NotificationsPage({ loans, showToast }) {
 }
 
 // ── Monthly Summary ────────────────────────────────────────────────────────────
-function SummaryPage({ loans, settled }) {
+function SummaryPage({ loans, settled, business }) {
+  const rate = salaryRate(business);
   const allLoans = [...loans, ...settled];
 
   const monthlyData = {};
@@ -1221,7 +1229,7 @@ function SummaryPage({ loans, settled }) {
     if (!monthlyData[key]) monthlyData[key] = { issued:0, interest:0, salary:0, count:0, settled:0, settledInterest:0 };
     monthlyData[key].issued += Number(l.amount||0);
     monthlyData[key].interest += Number(l.amount||0)*Number(l.interest_rate||0)/100;
-    monthlyData[key].salary += (Number(l.amount||0)*Number(l.interest_rate||0)/100)*0.30;
+    monthlyData[key].salary += (Number(l.amount||0)*Number(l.interest_rate||0)/100)*rate/100;
     monthlyData[key].count += 1;
     if (l.settled_at || l.status==="settled") {
       monthlyData[key].settled += 1;
@@ -1250,7 +1258,7 @@ function SummaryPage({ loans, settled }) {
               <div className="month-row"><span>Interest Expected</span><span style={{fontWeight:700,color:"#0891b2"}}>{fmt(d.interest)}</span></div>
               <div className="month-row"><span>Settled</span><span style={{fontWeight:700}}>{d.settled} loan{d.settled!==1?"s":""}</span></div>
               <div className="month-row"><span>Interest Collected</span><span style={{fontWeight:700,color:"#145f39"}}>{fmt(d.settledInterest)}</span></div>
-              <div className="month-row"><span>💼 Salary (30%)</span><span style={{fontWeight:800,color:"#7c3aed"}}>{fmt(d.salary)}</span></div>
+              <div className="month-row"><span>💼 Salary ({rate}%)</span><span style={{fontWeight:800,color:"#7c3aed"}}>{fmt(d.salary)}</span></div>
             </div>
           );
         })}
@@ -1275,14 +1283,16 @@ function SettingsPage({ business, setBusiness, showToast }) {
   };
 
   const handleSave = async () => {
+    const rate = Number(f.salary_rate ?? 30);
+    if (!(rate >= 0 && rate <= 100) || String(f.salary_rate ?? "30").trim() === "") { showToast("Salary share must be between 0 and 100%.","error"); return; }
     setSaving(true);
     const { error } = await supabase.from("business").update({
       name:f.name,tagline:f.tagline,phone:f.phone,email:f.email,
-      address:f.address,logo:f.logo,signature:f.signature,
+      address:f.address,logo:f.logo,signature:f.signature,salary_rate:rate,
     }).eq("id",business.id ?? 1);
     setSaving(false);
     if (error) { showToast("Failed to save.","error"); return; }
-    setBusiness(f); showToast("Settings saved! ✓");
+    setBusiness({...f, salary_rate: rate}); showToast("Settings saved! ✓");
   };
 
   return (
@@ -1308,6 +1318,11 @@ function SettingsPage({ business, setBusiness, showToast }) {
             <div className="form-group"><label>Phone</label><input value={f.phone||""} onChange={e=>set("phone",e.target.value)}/></div>
             <div className="form-group"><label>Email</label><input value={f.email||""} onChange={e=>set("email",e.target.value)}/></div>
             <div className="form-group"><label>Address</label><input value={f.address||""} onChange={e=>set("address",e.target.value)}/></div>
+            <div className="form-group">
+              <label>Salary share (%)</label>
+              <input type="number" min="0" max="100" step="0.5" inputMode="decimal" value={f.salary_rate ?? 30} onChange={e=>set("salary_rate",e.target.value)}/>
+              <div style={{fontSize:"0.74rem",color:"var(--muted)",marginTop:4}}>Part of the interest counted as salary on the Dashboard and Summary. Default 30%.</div>
+            </div>
           </div>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:"1.5rem"}}>
