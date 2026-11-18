@@ -32,6 +32,10 @@ export const installmentInfo = (loan) => {
   return { count, amount, label };
 };
 export const isOverdue = (loan) => loan.status === "active" && loan.due_date && new Date(loan.due_date + "T00:00:00") < new Date();
+// Prefix for new loan IDs: the logged-in business's code (SSL for Sonkhela).
+let ID_PREFIX = "SSL";
+export const setIdPrefix = (code) => { ID_PREFIX = /^[A-Z0-9]{2,6}$/.test(code || "") ? code : "SSL"; };
+
 export const genId = () => {
   // Unguessable ID: ~1 trillion combinations (was only 900 — enumerable).
   // Excludes ambiguous chars (0/O, 1/I/L) for easy reading over the phone.
@@ -40,7 +44,7 @@ export const genId = () => {
   crypto.getRandomValues(arr);
   let s = "";
   for (let i = 0; i < 8; i++) s += chars[arr[i] % chars.length];
-  return `SSL-${new Date().getFullYear()}-${s}`;
+  return `${ID_PREFIX}-${new Date().getFullYear()}-${s}`;
 };
 
 // fetch() that attaches the admin's Supabase session token.
