@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Head from "next/head";
 import { currentPortalSlug } from "../lib/portal";
+import { applyTheme } from "../lib/theme";
 
 const LOAN_TYPES = [
   ["collateral", "Collateral Backed Loan"],
@@ -95,7 +96,7 @@ export default function Apply() {
         <title>{portal.name ? `Apply for a loan · ${portal.name}` : "Apply for a loan"}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
-      <style dangerouslySetInnerHTML={{ __html: CSS }} />
+      <style dangerouslySetInnerHTML={{ __html: applyTheme(CSS, portal.theme) }} />
       <div className="page">
         <header className="brand">
           <div className="logo">{portal.logo ? <img src={portal.logo} alt="" /> : (portal.name || "?").slice(0, 1)}</div>

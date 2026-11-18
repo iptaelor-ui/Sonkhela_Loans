@@ -15,6 +15,7 @@ export default async function handler(req, res) {
     email: biz.email || tenant.contact_email || "",
     address: biz.address || "",
     logo: biz.logo || null,
+    theme: biz.theme || "green",
     accepting,
   });
 }

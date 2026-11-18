@@ -2,6 +2,7 @@
 // on Sonkhela green. Used for the home-screen icon on Android and iPhone.
 import { ImageResponse } from "next/og";
 import { appBrand } from "../../lib/appBrand";
+import { THEMES, themeName } from "../../lib/theme";
 
 export const config = { runtime: "edge" };
 
@@ -11,14 +12,14 @@ export default async function handler(req) {
   const maskable = searchParams.get("maskable") === "1";
   const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
 
-  let brand = { name: "Sonkhela Soft Loans", logo: null };
+  let brand = { name: "Sonkhela Soft Loans", logo: null, theme: "green" };
   try { brand = await appBrand(host); } catch {}
   const logo = /^data:image\/(png|jpe?g);base64,/.test(brand.logo || "") ? brand.logo : null;
   const inner = Math.round(size * (maskable ? 0.62 : 0.78)); // maskable icons need a safe margin
 
   return new ImageResponse(
     (
-      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,#145f39,#1a7a4a)" }}>
+      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(135deg,${THEMES[themeName(brand.theme)].dark},${THEMES[themeName(brand.theme)].primary})` }}>
         {logo ? (
           <img src={logo} width={inner} height={inner} style={{ borderRadius: "50%", objectFit: "cover", border: `${Math.round(size * 0.015)}px solid rgba(255,255,255,0.35)` }} />
         ) : (

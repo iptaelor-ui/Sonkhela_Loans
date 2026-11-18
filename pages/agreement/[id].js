@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import { supabase, fmt, fmtDate, calcLoan, isOverdue, installmentInfo, AGR_STYLES } from "../shared";
+import { applyTheme } from "../../lib/theme";
 
 const PAGE_STYLES = `
 ${AGR_STYLES}
@@ -51,8 +52,9 @@ export default function AgreementPage() {
   useEffect(() => { if (!id) return; loadData(); }, [id]);
 
   const loadData = async () => {
-    const { data, error } = await supabase.rpc("get_agreement", { p_id: id });
-    if (error || !data || !data.loan) { setStatus("notfound"); return; }
+    const r = await fetch(`/api/agreement?id=${encodeURIComponent(id)}`).catch(() => null);
+    const data = r?.ok ? await r.json() : null;
+    if (!data || !data.loan) { setStatus("notfound"); return; }
     setLoan(data.loan);
     setBusiness(data.business);
     if (data.loan.client_signature) setSigSaved(true);
@@ -155,8 +157,8 @@ export default function AgreementPage() {
     setDownloading(false);
   };
 
-  if (status === "loading") return (<><style dangerouslySetInnerHTML={{ __html: PAGE_STYLES }}/><div className="loading-screen"><div className="loading-spinner"/><div className="loading-text">Loading agreement...</div></div></>);
-  if (status === "notfound") return (<><style dangerouslySetInnerHTML={{ __html: PAGE_STYLES }}/><div className="error-screen"><div className="error-icon">🔍</div><div className="error-title">Agreement Not Found</div><div className="error-sub">This link may be invalid or the agreement has been removed.</div></div></>);
+  if (status === "loading") return (<><style dangerouslySetInnerHTML={{ __html: applyTheme(PAGE_STYLES, business?.theme) }}/><div className="loading-screen"><div className="loading-spinner"/><div className="loading-text">Loading agreement...</div></div></>);
+  if (status === "notfound") return (<><style dangerouslySetInnerHTML={{ __html: applyTheme(PAGE_STYLES, business?.theme) }}/><div className="error-screen"><div className="error-icon">🔍</div><div className="error-title">Agreement Not Found</div><div className="error-sub">This link may be invalid or the agreement has been removed.</div></div></>);
 
   const calc = calcLoan(loan.amount, loan.interest_rate, loan.repayment);
   const over = isOverdue(loan);
@@ -165,7 +167,7 @@ export default function AgreementPage() {
   const instLabel = installmentInfo(loan).label;
 
   return (
-    <><style dangerouslySetInnerHTML={{ __html: PAGE_STYLES }}/>
+    <><style dangerouslySetInnerHTML={{ __html: applyTheme(PAGE_STYLES, business?.theme) }}/>
     <div className="agr-page">
 
       <div className="dl-bar">

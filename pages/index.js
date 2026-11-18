@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase, fmt, fmtDate, isOverdue, genId, setIdPrefix, authFetch, AGR_STYLES } from "./shared";
 import { currentPortalSlug } from "../lib/portal";
 import { SONKHELA_TENANT_ID } from "../lib/tenantIds";
+import { applyTheme, THEMES } from "../lib/theme";
 
 const ADMIN_STYLES = `
 ${AGR_STYLES}
@@ -278,7 +279,7 @@ export default function App() {
         const r = await fetch(`/api/portal?portal=${encodeURIComponent(slug)}`).catch(() => null);
         if (r?.ok) {
           const p = await r.json();
-          setBusiness({ name:p.name, tagline:p.tagline, phone:p.phone, email:p.email, address:p.address, logo:p.logo, signature:null });
+          setBusiness({ name:p.name, tagline:p.tagline, phone:p.phone, email:p.email, address:p.address, logo:p.logo, signature:null, theme:p.theme });
           return;
         }
       }
@@ -345,10 +346,10 @@ export default function App() {
     { id:"settings", icon:"⚙️", label:"Settings" },
   ];
 
-  if (screen === "loading") return (<><style dangerouslySetInnerHTML={{ __html: ADMIN_STYLES }}/><div className="loading-screen"><div className="loading-spinner"/><div className="loading-text">Loading{business?.name ? " " + business.name : ""}...</div></div></>);
+  if (screen === "loading") return (<><style dangerouslySetInnerHTML={{ __html: applyTheme(ADMIN_STYLES, business?.theme) }}/><div className="loading-screen"><div className="loading-spinner"/><div className="loading-text">Loading{business?.name ? " " + business.name : ""}...</div></div></>);
 
   if (screen === "login") return (
-    <><style dangerouslySetInnerHTML={{ __html: ADMIN_STYLES }}/>
+    <><style dangerouslySetInnerHTML={{ __html: applyTheme(ADMIN_STYLES, business?.theme) }}/>
     <div className="login-shell">
       <div className="login-box fade-up">
         <div className="login-logo">{business?.logo ? <img src={business.logo} alt="logo"/> : (business?.name||"S")[0]}</div>
@@ -381,7 +382,7 @@ export default function App() {
   );
 
   return (
-    <><style dangerouslySetInnerHTML={{ __html: ADMIN_STYLES }}/>
+    <><style dangerouslySetInnerHTML={{ __html: applyTheme(ADMIN_STYLES, business?.theme) }}/>
     {toast.msg && <div className={`toast ${toast.type==="error"?"error":toast.type==="info"?"info":""}`}>{toast.msg}</div>}
     <div className="shell">
       {/* Desktop Sidebar */}
@@ -1431,7 +1432,7 @@ function SettingsPage({ business, setBusiness, showToast }) {
     setSaving(true);
     const { error } = await supabase.from("business").update({
       name:f.name,tagline:f.tagline,phone:f.phone,email:f.email,
-      address:f.address,logo:f.logo,signature:f.signature,salary_rate:rate,
+      address:f.address,logo:f.logo,signature:f.signature,salary_rate:rate,theme:f.theme||"green",
     }).eq("id",business.id ?? 1);
     setSaving(false);
     if (error) { showToast("Failed to save.","error"); return; }
@@ -1461,6 +1462,12 @@ function SettingsPage({ business, setBusiness, showToast }) {
             <div className="form-group"><label>Phone</label><input value={f.phone||""} onChange={e=>set("phone",e.target.value)}/></div>
             <div className="form-group"><label>Email</label><input value={f.email||""} onChange={e=>set("email",e.target.value)}/></div>
             <div className="form-group"><label>Address</label><input value={f.address||""} onChange={e=>set("address",e.target.value)}/></div>
+            <div className="form-group">
+              <label>Colour theme</label>
+              <select value={f.theme || "green"} onChange={e=>set("theme",e.target.value)}>
+                {Object.entries(THEMES).map(([k,t]) => <option key={k} value={k}>{t.label}</option>)}
+              </select>
+            </div>
             <div className="form-group">
               <label>Salary share (%)</label>
               <input type="number" min="0" max="100" step="0.5" inputMode="decimal" value={f.salary_rate ?? 30} onChange={e=>set("salary_rate",e.target.value)}/>
