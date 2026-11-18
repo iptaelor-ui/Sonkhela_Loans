@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase, fmt, fmtDate, isOverdue, genId, authFetch, AGR_STYLES } from "./shared";
 import { currentPortalSlug } from "../lib/portal";
+import { SONKHELA_TENANT_ID } from "../lib/tenantIds";
 
 const ADMIN_STYLES = `
 ${AGR_STYLES}
@@ -65,6 +66,14 @@ body.dark{--bg:#0f1a13;--white:#1a2e1f;--border:#2a4030;--muted:#7a9e85;--ink:#e
 /* ── Cards & Tables ── */
 .card{background:var(--white);border-radius:12px;border:1px solid var(--border);margin-bottom:1.5rem;box-shadow:0 1px 6px rgba(26,122,74,0.07);}
 .card-head{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.share-apply{padding:1rem 1.15rem;}
+.share-apply-sub{color:var(--muted);font-size:0.8rem;margin-top:2px;}
+.share-apply-row{display:flex;gap:0.6rem;align-items:center;margin-top:0.75rem;flex-wrap:wrap;}
+.share-apply-url{flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--border);border-radius:9px;font-family:'Nunito',sans-serif;font-size:0.85rem;font-weight:700;color:var(--ink);background:var(--accent);}
+.share-apply-btns{display:flex;gap:0.5rem;flex-wrap:wrap;}
+.share-apply-btns a{text-decoration:none;}
+.clients-link{text-decoration:none;color:#fff!important;border-color:rgba(255,255,255,0.35)!important;}
+.clients-top{text-decoration:none;}
 .card-title{font-family:'Lora',serif;font-size:0.95rem;font-weight:700;}
 .card-body{padding:1.25rem;}
 .tbl-wrap{overflow-x:auto;}
@@ -201,6 +210,22 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [toast, setToast] = useState({ msg: "", type: "ok" });
 
+  // Which business the logged-in user belongs to (for the apply link and Clients button)
+  const [me, setMe] = useState(null);
+  useEffect(() => {
+    if (screen !== "app") return;
+    (async () => {
+      const { data: m } = await supabase.from("tenant_users").select("tenant_id, role").maybeSingle();
+      if (!m) return;
+      const { data: t } = await supabase.from("tenants").select("slug").eq("id", m.tenant_id).maybeSingle();
+      const isSonkhela = m.tenant_id === SONKHELA_TENANT_ID;
+      setMe({
+        isPlatformAdmin: isSonkhela && m.role === "owner",
+        applyUrl: isSonkhela || !t?.slug ? "https://sonkhela.com/apply" : `https://${t.slug}.sonkhela.com/apply`,
+      });
+    })();
+  }, [screen]);
+
   const showToast = (msg, type = "ok") => { setToast({ msg, type }); setTimeout(() => setToast({ msg: "", type: "ok" }), 3500); };
 
   useEffect(() => {
@@ -280,6 +305,7 @@ export default function App() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setLoginPassword("");
+    setMe(null);
     await loadBusiness();
     setScreen("login");
   };
@@ -296,10 +322,10 @@ export default function App() {
     { id:"settings", icon:"⚙️", label:"Settings" },
   ];
 
-  if (screen === "loading") return (<><style>{ADMIN_STYLES}</style><div className="loading-screen"><div className="loading-spinner"/><div className="loading-text">Loading{business?.name ? " " + business.name : ""}...</div></div></>);
+  if (screen === "loading") return (<><style dangerouslySetInnerHTML={{ __html: ADMIN_STYLES }}/><div className="loading-screen"><div className="loading-spinner"/><div className="loading-text">Loading{business?.name ? " " + business.name : ""}...</div></div></>);
 
   if (screen === "login") return (
-    <><style>{ADMIN_STYLES}</style>
+    <><style dangerouslySetInnerHTML={{ __html: ADMIN_STYLES }}/>
     <div className="login-shell">
       <div className="login-box fade-up">
         <div className="login-logo">{business?.logo ? <img src={business.logo} alt="logo"/> : (business?.name||"S")[0]}</div>
@@ -332,7 +358,7 @@ export default function App() {
   );
 
   return (
-    <><style>{ADMIN_STYLES}</style>
+    <><style dangerouslySetInnerHTML={{ __html: ADMIN_STYLES }}/>
     {toast.msg && <div className={`toast ${toast.type==="error"?"error":toast.type==="info"?"info":""}`}>{toast.msg}</div>}
     <div className="shell">
       {/* Desktop Sidebar */}
@@ -351,6 +377,7 @@ export default function App() {
           ))}
         </nav>
         <div className="sidebar-footer">
+          {me?.isPlatformAdmin && <a className="logout-btn clients-link" href="/admin/tenants">🏢 Client businesses</a>}
           <button className="dark-toggle" onClick={() => setDarkMode(d => !d)}>
             {darkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}
           </button>
@@ -376,12 +403,13 @@ export default function App() {
           <div className="topbar-title">{navItems.find(n=>n.id===activePage)?.label}</div>
           <div style={{display:"flex",alignItems:"center",gap:"0.75rem"}}>
             <button className="btn btn-ghost btn-xs" onClick={() => setDarkMode(d=>!d)} style={{display:"none"}}>{darkMode?"☀️":"🌙"}</button>
+            {me?.isPlatformAdmin && <a className="btn btn-outline btn-xs clients-top" href="/admin/tenants">🏢 Clients</a>}
             <div className="topbar-date">{new Date().toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"})}</div>
           </div>
         </div>
         <div className="page fade-up" key={activePage}>
-          {activePage==="dashboard" && <Dashboard loans={loans} settled={settled} setActivePage={setActivePage} showToast={showToast}/>}
-          {activePage==="applications" && <ApplicationsPage applications={applications} setApplications={setApplications} loans={loans} setLoans={setLoans} showToast={showToast}/>}
+          {activePage==="dashboard" && <Dashboard loans={loans} settled={settled} setActivePage={setActivePage} showToast={showToast} applyUrl={me?.applyUrl}/>}
+          {activePage==="applications" && <ApplicationsPage applications={applications} setApplications={setApplications} loans={loans} setLoans={setLoans} showToast={showToast} applyUrl={me?.applyUrl}/>}
           {activePage==="clients" && <ClientsPage loans={loans} setLoans={setLoans} settled={settled} setSettled={setSettled} showToast={showToast} business={business}/>}
           {activePage==="records" && <RecordsPage settled={settled} setSettled={setSettled} showToast={showToast}/>}
           {activePage==="notifications" && <NotificationsPage loans={loans} showToast={showToast}/>}
@@ -390,6 +418,38 @@ export default function App() {
         </div>
       </div>
     </div></>
+  );
+}
+
+// Box with the business's public application link: copy, WhatsApp, or phone share sheet.
+function ShareApplyLink({ url, showToast }) {
+  const [canShare, setCanShare] = useState(false);
+  useEffect(() => { setCanShare(typeof navigator !== "undefined" && !!navigator.share); }, []);
+  if (!url) return null;
+  const text = "Apply for a loan here:";
+  const copy = () => {
+    const done = () => showToast("✓ Apply link copied! Paste it to anyone who wants a loan.");
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(url).then(done).catch(() => window.prompt("Copy this link:", url));
+    else window.prompt("Copy this link:", url);
+  };
+  const share = () => navigator.share({ title: "Apply for a loan", text, url }).catch(() => {});
+  return (
+    <div className="card share-apply">
+      <div className="share-apply-head">
+        <div>
+          <div className="card-title">📨 Your loan application link</div>
+          <div className="share-apply-sub">Send this to anyone who wants a loan. Their application comes straight to your Applications page.</div>
+        </div>
+      </div>
+      <div className="share-apply-row">
+        <input className="share-apply-url" readOnly value={url} onFocus={e => e.target.select()} aria-label="Application link"/>
+        <div className="share-apply-btns">
+          <button className="btn btn-green btn-sm" onClick={copy}>🔗 Copy link</button>
+          <a className="btn btn-outline btn-sm" href={`https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`} target="_blank" rel="noreferrer">WhatsApp</a>
+          {canShare && <button className="btn btn-ghost btn-sm" onClick={share}>Share…</button>}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -454,7 +514,7 @@ function notifyApplicant(type, applicationId, extra = {}) {
   }).then(r => r.json()).catch(err => ({ error: String(err) }));
 }
 
-function ApplicationsPage({ applications, setApplications, loans, setLoans, showToast }) {
+function ApplicationsPage({ applications, setApplications, loans, setLoans, showToast, applyUrl }) {
   const [tab, setTab] = useState("pending");
   const [detail, setDetail] = useState(null);      // application being viewed
   const [approving, setApproving] = useState(null); // application being approved (opens LoanModal)
@@ -543,6 +603,7 @@ function ApplicationsPage({ applications, setApplications, loans, setLoans, show
 
   return (
     <>
+      <ShareApplyLink url={applyUrl} showToast={showToast}/>
       <div className="app-tabs">
         {APP_STATUSES.map(s => (
           <button key={s.id} className={`app-tab ${tab===s.id?"active":""}`} onClick={() => setTab(s.id)}>
@@ -670,7 +731,7 @@ function AppDetailModal({ app, onClose, onApprove, onReject, onMoreInfo, showToa
 
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
-function Dashboard({ loans, settled, setActivePage, showToast }) {
+function Dashboard({ loans, settled, setActivePage, showToast, applyUrl }) {
   const activeLoans = loans.filter(l => l.status !== "settled");
   const totalIssued = activeLoans.reduce((s,l) => s+Number(l.amount),0);
   const totalInterest = activeLoans.reduce((s,l) => s+(Number(l.amount)*Number(l.interest_rate)/100),0);
@@ -691,6 +752,8 @@ function Dashboard({ loans, settled, setActivePage, showToast }) {
         <h1 style={{fontFamily:"'Lora',serif",fontSize:"1.5rem",fontWeight:700,marginBottom:4}}>Welcome back 👋</h1>
         <p style={{color:"var(--muted)",fontSize:"0.85rem"}}>Here's what's happening with your loan portfolio today.</p>
       </div>
+
+      <ShareApplyLink url={applyUrl} showToast={showToast}/>
 
       {/* Notification Banner */}
       {(dueSoon.length > 0 || overdueList.length > 0) && (
