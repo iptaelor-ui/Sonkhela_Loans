@@ -2,6 +2,7 @@
 import { createClient } from "@supabase/supabase-js";
 const { sendSMS } = require("../../lib/sms");
 import { getTenantContext } from "../../lib/serverAuth";
+import { loadPlan } from "../../lib/features";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -31,8 +32,12 @@ export default async function handler(req, res) {
     return res.status(404).json({ error: "Log not found" });
   }
 
-  // Resend
-  const result = await sendSMS(log.phone_number, log.message);
+  const plan = await loadPlan(supabase, ctx.tenantId);
+  if (!plan?.canWrite) return res.status(403).json({ error: "Your subscription has ended. Renew to send messages." });
+  if (!plan.smsReady) return res.status(400).json({ error: "Your SMS account isn't connected yet." });
+
+  // Resend from this business's own SMS account
+  const result = await sendSMS(log.phone_number, log.message, plan.smsCreds);
 
   // Update log status
   const newStatus = result.success ? "Retried-Success" : "Retried-Failed";

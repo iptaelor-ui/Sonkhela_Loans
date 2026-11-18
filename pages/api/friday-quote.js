@@ -7,6 +7,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { SONKHELA_TENANT_ID } from "../../lib/serverAuth";
 import { sendSMS } from "../../lib/sms";
+import { loadPlan, businessName } from "../../lib/features";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -114,6 +115,39 @@ Return ONLY valid JSON in exactly this shape, with no backticks and no other tex
   return post.title;
 }
 
+async function sendToClients(quote) {
+  const { data: tenants } = await supabase
+    .from("tenants")
+    .select("id, business_name")
+    .in("status", ["trial", "active", "grace"])
+    .neq("id", SONKHELA_TENANT_ID);
+  const out = [];
+  for (const t of tenants || []) {
+    try {
+      const plan = await loadPlan(supabase, t.id);
+      if (!plan?.features.weekly_quotes) continue;
+      if (!plan.smsReady) { out.push({ business: t.business_name, skipped: "SMS account not connected" }); continue; }
+      const [{ data: a }, { data: b }] = await Promise.all([
+        supabase.from("loans").select("client_phone").eq("tenant_id", t.id),
+        supabase.from("settled_loans").select("client_phone").eq("tenant_id", t.id),
+      ]);
+      const phones = [...new Set([...(a || []), ...(b || [])].map((r) => r.client_phone?.trim()).filter(Boolean))];
+      if (phones.length === 0) { out.push({ business: t.business_name, skipped: "no borrowers" }); continue; }
+      const name = await businessName(supabase, t.id, t.business_name);
+      const signed = /- Sonkhela Capital\s*$/.test(quote) ? quote.replace(/- Sonkhela Capital\s*$/, `- ${name}`) : `${quote}\n- ${name}`;
+      const r = await sendSMS(phones, signed, plan.smsCreds);
+      await supabase.from("sms_logs").insert({
+        tenant_id: t.id, type: "friday_quote", message: signed,
+        recipients_count: r.success ? phones.length : 0, sent_at: new Date().toISOString(),
+      });
+      out.push({ business: t.business_name, recipients: phones.length, sent: r.success });
+    } catch (e) {
+      out.push({ business: t.business_name, error: e.message });
+    }
+  }
+  return out;
+}
+
 export default async function handler(req, res) {
   // Verify cron secret
   if (req.headers["x-cron-secret"] !== process.env.CRON_SECRET) {
@@ -157,28 +191,32 @@ export default async function handler(req, res) {
       /^\+260[97]\d{8}$/.test(p)
     );
 
-    if (validPhones.length === 0) {
-      return res.status(200).json({ message: "No valid phone numbers found." });
-    }
-
     // Generate the quote (theme shared with the blog post)
     const theme = THEMES[Math.floor(Math.random() * THEMES.length)];
     const quote = await generateFinancialQuote(theme);
 
-    // Send SMS to all unique valid numbers
-    const result = await sendSMS(validPhones, quote);
+    // Send SMS to all of Sonkhela's unique valid numbers
+    let result = { skipped: "No valid phone numbers found." };
+    if (validPhones.length > 0) {
+      result = await sendSMS(validPhones, quote);
 
-    // Log to Supabase
-    try {
-      await supabase.from("sms_logs").insert({
-        type: "friday_quote",
-        message: quote,
-        recipients_count: validPhones.length,
-        sent_at: new Date().toISOString(),
-      });
-    } catch (e) {
-      console.warn("sms_logs insert skipped:", e.message);
+      // Log to Supabase
+      try {
+        await supabase.from("sms_logs").insert({
+          tenant_id: SONKHELA_TENANT_ID,
+          type: "friday_quote",
+          message: quote,
+          recipients_count: validPhones.length,
+          sent_at: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.warn("sms_logs insert skipped:", e.message);
+      }
     }
+
+    // Client businesses on a package with weekly quotes: same tip, signed with their name,
+    // sent from their own SMS account. One failing never stops the others.
+    const clients = await sendToClients(quote).catch((e) => [{ error: e.message }]);
 
     // Publish the blog post — never allowed to break the SMS flow
     let blogTitle = null;
@@ -197,6 +235,7 @@ export default async function handler(req, res) {
       blog_error: blogError,
       total_records: allRecords.length,
       unique_recipients: validPhones.length,
+      clients,
       duplicates_removed: allRecords.length - uniqueClients.size,
       result,
     });

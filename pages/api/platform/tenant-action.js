@@ -76,6 +76,27 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    case "set_sms": {
+      // Client's own Africa's Talking account. Leave the API key blank to keep the saved one.
+      const at_username = String(req.body.at_username || "").trim();
+      const at_sender_id = String(req.body.at_sender_id || "").trim();
+      const newKey = String(req.body.at_api_key || "").trim();
+      if (!at_username) return res.status(400).json({ error: "Africa's Talking username is required." });
+      if (at_username === "sandbox") return res.status(400).json({ error: "\"sandbox\" can't send real SMS. Use the client's live username." });
+      if (!newKey && !t.at_api_key) return res.status(400).json({ error: "API key is required." });
+      const fields = { at_username, at_sender_id: at_sender_id || null };
+      if (newKey) fields.at_api_key = newKey;
+      const { error } = await update(fields);
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(200).json({ ok: true });
+    }
+
+    case "clear_sms": {
+      const { error } = await update({ at_username: null, at_api_key: null, at_sender_id: null });
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(200).json({ ok: true });
+    }
+
     case "reset_password": {
       // Resets the owner's password and returns a new temporary one to send them
       const { data: owner } = await svc

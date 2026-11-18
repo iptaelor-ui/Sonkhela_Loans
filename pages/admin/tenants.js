@@ -25,6 +25,7 @@ export default function TenantsPanel() {
   const [busy, setBusy] = useState("");
   const [creds, setCreds] = useState(null); // login details to hand to a client
   const [setup, setSetup] = useState(null); // portal setup steps for a client
+  const [smsFor, setSmsFor] = useState(null); // client whose SMS account is being edited
   const [toast, setToast] = useState("");
   const [filter, setFilter] = useState("all");
 
@@ -91,6 +92,14 @@ export default function TenantsPanel() {
   return (
     <Shell>
       {toast && <div className="toast">{toast}</div>}
+
+      {smsFor && (
+        <div className="overlay" onClick={() => setSmsFor(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <SmsForm t={smsFor} act={act} close={() => setSmsFor(null)} />
+          </div>
+        </div>
+      )}
 
       {setup && (
         <div className="overlay" onClick={() => setSetup(null)}>
@@ -202,7 +211,7 @@ export default function TenantsPanel() {
         ) : (
           <div className="list">
             {shown.map((t) => (
-              <TenantRow key={t.id} t={t} packages={state.packages} busy={busy === t.id} act={act} setCreds={setCreds} setSetup={setSetup} />
+              <TenantRow key={t.id} t={t} packages={state.packages} busy={busy === t.id} act={act} setCreds={setCreds} setSetup={setSetup} setSmsFor={setSmsFor} />
             ))}
           </div>
         )}
@@ -211,7 +220,7 @@ export default function TenantsPanel() {
   );
 }
 
-function TenantRow({ t, packages, busy, act, setCreds, setSetup }) {
+function TenantRow({ t, packages, busy, act, setCreds, setSetup, setSmsFor }) {
   const [days, setDays] = useState(30);
   const s = STATUS[t.status] || STATUS.cancelled;
   const owner = t.users.find((u) => u.role === "owner");
@@ -255,6 +264,7 @@ function TenantRow({ t, packages, busy, act, setCreds, setSetup }) {
             if (r?.login) setCreds({ business: t.business_name, ...r.login });
           }}>Reset password</button>
           <button className="btn small ghost" onClick={() => setSetup(t)}>Portal setup</button>
+          <button className="btn small ghost" onClick={() => setSmsFor(t)}>{t.sms_connected ? "SMS ✓" : "SMS account"}</button>
           {t.loan_count === 0 && (
             <button className="btn small danger" disabled={busy} onClick={() => {
               if (confirm(`Permanently delete ${t.business_name} and its login? Only possible while it has no loans.`)) act({ action: "delete", tenantId: t.id }, "Client deleted");
@@ -263,6 +273,42 @@ function TenantRow({ t, packages, busy, act, setCreds, setSetup }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function SmsForm({ t, act, close }) {
+  const [f, setF] = useState({ at_username: t.at_username || "", at_api_key: "", at_sender_id: t.at_sender_id || "" });
+  const [saving, setSaving] = useState(false);
+  const save = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    const r = await act({ action: "set_sms", tenantId: t.id, ...f }, "SMS account saved");
+    setSaving(false);
+    if (r) close();
+  };
+  return (
+    <form onSubmit={save} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <h2>SMS account: {t.business_name}</h2>
+      <p className="muted small">
+        The client's own Africa's Talking account. Their reminders, weekly tips and custom texts are sent from it,
+        using their airtime and sender name. {t.sms_connected ? "Currently connected." : "Not connected yet."}
+      </p>
+      <label className="field"><span>Username (live, not "sandbox") *</span>
+        <input required value={f.at_username} onChange={(e) => setF({ ...f, at_username: e.target.value })} /></label>
+      <label className="field"><span>API key {t.sms_connected ? "(leave blank to keep the saved key)" : "*"}</span>
+        <input type="password" autoComplete="off" required={!t.sms_connected} value={f.at_api_key} onChange={(e) => setF({ ...f, at_api_key: e.target.value })} /></label>
+      <label className="field"><span>Sender ID (optional, must be approved on Africa's Talking)</span>
+        <input value={f.at_sender_id} onChange={(e) => setF({ ...f, at_sender_id: e.target.value.toUpperCase() })} placeholder="e.g. RTCREDIT" /></label>
+      <div className="row">
+        <button className="btn" disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+        <button type="button" className="btn ghost" onClick={close}>Cancel</button>
+        {t.sms_connected && (
+          <button type="button" className="btn danger" onClick={async () => {
+            if (confirm(`Disconnect ${t.business_name}'s SMS account? Their texts will stop.`) && await act({ action: "clear_sms", tenantId: t.id }, "SMS account removed")) close();
+          }}>Disconnect</button>
+        )}
+      </div>
+    </form>
   );
 }
 
