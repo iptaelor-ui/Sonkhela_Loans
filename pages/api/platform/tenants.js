@@ -5,7 +5,7 @@ import { RESERVED_SLUGS, SLUG_RE, todayLusaka, addDays, daysBetween, tempPasswor
 import { makeCode } from "../../../lib/codes";
 
 const TENANT_COLS =
-  "id,slug,code,business_name,contact_name,contact_email,contact_phone,package_id,status,subscription_start,subscription_end,at_sender_id,created_at";
+  "id,slug,code,business_name,contact_name,contact_email,contact_phone,package_id,status,subscription_start,subscription_end,at_username,at_sender_id,at_api_key,created_at";
 
 export default async function handler(req, res) {
   const ctx = await getTenantContext(req);
@@ -39,8 +39,10 @@ async function list(svc, res) {
       const users = (membersRes.data || [])
         .filter((m) => m.tenant_id === t.id)
         .map((m) => ({ id: m.id, role: m.role, email: emailById.get(m.id) || "?" }));
+      const { at_api_key, ...safe } = t;
       return {
-        ...t,
+        ...safe,
+        sms_connected: !!(t.at_username && at_api_key),
         is_sonkhela: t.id === SONKHELA_TENANT_ID,
         loan_count: count || 0,
         users,

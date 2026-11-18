@@ -66,6 +66,24 @@ body.dark{--bg:#0f1a13;--white:#1a2e1f;--border:#2a4030;--muted:#7a9e85;--ink:#e
 /* ── Cards & Tables ── */
 .card{background:var(--white);border-radius:12px;border:1px solid var(--border);margin-bottom:1.5rem;box-shadow:0 1px 6px rgba(26,122,74,0.07);}
 .card-head{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.plan-banner{margin:1rem 1.5rem 0;padding:0.75rem 1rem;border-radius:10px;font-size:0.85rem;font-weight:700;line-height:1.5;border:1px solid;}
+.plan-banner.red{background:#fdf0ee;color:#991b1b;border-color:#f3c4bd;}
+.plan-banner.amber{background:#fffbeb;color:#92400e;border-color:#fde68a;}
+.plan-banner.blue{background:#eff6ff;color:#1e40af;border-color:#bfdbfe;}
+.feat-row{display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0;border-top:1px solid var(--border);}
+.feat-row:first-of-type{border-top:none;}
+.feat-row.is-locked .feat-name,.feat-row.is-locked .feat-desc,.feat-row.is-locked .feat-icon{opacity:0.5;}
+.feat-icon{font-size:1.2rem;width:28px;text-align:center;}
+.feat-name{font-weight:800;font-size:0.88rem;}
+.feat-desc{font-size:0.76rem;color:var(--muted);}
+.feat-pill{font-size:0.7rem;font-weight:800;padding:4px 10px;border-radius:20px;white-space:nowrap;border:none;font-family:'Nunito',sans-serif;}
+.feat-pill.on{background:#d1fae5;color:#065f46;}
+.feat-pill.wait{background:#fef3c7;color:#92400e;}
+.feat-pill.locked{background:#ede9fe;color:#5b21b6;cursor:pointer;}
+.feat-note{margin-top:0.6rem;font-size:0.78rem;color:var(--muted);background:var(--accent);border-radius:8px;padding:8px 10px;}
+.upgrade-box{background:#ede9fe;color:#4c1d95;border-radius:10px;padding:12px 14px;font-size:0.9rem;}
+.locked-btn{opacity:0.65;}
+@media(max-width:768px){.plan-banner{margin:0.75rem 1rem 0;}}
 .share-apply{padding:1rem 1.15rem;}
 .share-apply-sub{color:var(--muted);font-size:0.8rem;margin-top:2px;}
 .share-apply-row{display:flex;gap:0.6rem;align-items:center;margin-top:0.75rem;flex-wrap:wrap;}
@@ -212,6 +230,7 @@ export default function App() {
 
   // Which business the logged-in user belongs to (for the apply link and Clients button)
   const [me, setMe] = useState(null);
+  const [plan, setPlan] = useState(null); // package, status and features of this business
   useEffect(() => {
     if (screen !== "app") return;
     (async () => {
@@ -220,6 +239,7 @@ export default function App() {
       const { data: t } = await supabase.from("tenants").select("slug, code").eq("id", m.tenant_id).maybeSingle();
       const isSonkhela = m.tenant_id === SONKHELA_TENANT_ID;
       setIdPrefix(isSonkhela ? "SSL" : t?.code); // new loans get this business's prefix
+      authFetch("/api/my-plan").then(r => r.ok ? r.json() : null).then(setPlan).catch(() => {});
       setMe({
         isPlatformAdmin: isSonkhela && m.role === "owner",
         applyUrl: isSonkhela || !t?.slug ? "https://sonkhela.com/apply" : `https://${t.slug}.sonkhela.com/apply`,
@@ -307,6 +327,7 @@ export default function App() {
     await supabase.auth.signOut();
     setLoginPassword("");
     setMe(null);
+    setPlan(null);
     setIdPrefix("SSL");
     await loadBusiness();
     setScreen("login");
@@ -409,12 +430,13 @@ export default function App() {
             <div className="topbar-date">{new Date().toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"})}</div>
           </div>
         </div>
+        <PlanBanner plan={plan}/>
         <div className="page fade-up" key={activePage}>
           {activePage==="dashboard" && <Dashboard loans={loans} settled={settled} setActivePage={setActivePage} showToast={showToast} applyUrl={me?.applyUrl} business={business}/>}
           {activePage==="applications" && <ApplicationsPage applications={applications} setApplications={setApplications} loans={loans} setLoans={setLoans} showToast={showToast} applyUrl={me?.applyUrl}/>}
           {activePage==="clients" && <ClientsPage loans={loans} setLoans={setLoans} settled={settled} setSettled={setSettled} showToast={showToast} business={business}/>}
           {activePage==="records" && <RecordsPage settled={settled} setSettled={setSettled} showToast={showToast}/>}
-          {activePage==="notifications" && <NotificationsPage loans={loans} showToast={showToast}/>}
+          {activePage==="notifications" && <NotificationsPage loans={loans} showToast={showToast} plan={plan}/>}
           {activePage==="summary" && <SummaryPage loans={loans} settled={settled} business={business}/>}
           {activePage==="settings" && <SettingsPage business={business} setBusiness={setBusiness} showToast={showToast}/>}
         </div>
@@ -449,6 +471,115 @@ function ShareApplyLink({ url, showToast }) {
           <button className="btn btn-green btn-sm" onClick={copy}>🔗 Copy link</button>
           <a className="btn btn-outline btn-sm" href={`https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`} target="_blank" rel="noreferrer">WhatsApp</a>
           {canShare && <button className="btn btn-ghost btn-sm" onClick={share}>Share…</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Subscription & feature locks ───────────────────────────────────────────────
+const FEATURE_INFO = {
+  sms_reminders:    { icon: "⏰", name: "Automatic SMS reminders", desc: "Texts borrowers 2 days before and on the due date." },
+  weekly_quotes:    { icon: "💡", name: "Weekly money tips", desc: "A short financial tip by SMS to your borrowers every Friday." },
+  custom_messaging: { icon: "📱", name: "Custom SMS to borrowers", desc: "Write and send your own text to any borrower." },
+};
+const FEATURE_COL = { sms_reminders: "can_sms_reminders", weekly_quotes: "can_weekly_quotes", custom_messaging: "can_custom_messaging" };
+
+function PlanBanner({ plan }) {
+  if (!plan || plan.isSonkhela) return null;
+  const contact = [plan.contact?.phone, plan.contact?.email].filter(Boolean).join(" or ");
+  const ends = plan.subscription_end ? fmtDate(plan.subscription_end) : "";
+  let cls = "", text = null;
+  if (plan.status === "suspended" || plan.status === "cancelled") {
+    cls = "red";
+    text = <>Your subscription has ended. You can still view your records, but adding or changing anything is paused. Contact {plan.contact?.name}{contact ? ` on ${contact}` : ""} to renew.</>;
+  } else if (plan.status === "grace") {
+    cls = "amber";
+    text = <>Your subscription ended on {ends}. Renew within a few days to keep using the system. Contact {plan.contact?.name}{contact ? ` on ${contact}` : ""}.</>;
+  } else if (plan.status === "trial" && plan.days_left !== null) {
+    cls = "blue";
+    text = plan.days_left > 0
+      ? <>Free trial: {plan.days_left} day{plan.days_left === 1 ? "" : "s"} left ({plan.package?.name}). Contact {plan.contact?.name}{contact ? ` on ${contact}` : ""} to subscribe.</>
+      : <>Your free trial ends today. Contact {plan.contact?.name}{contact ? ` on ${contact}` : ""} to subscribe.</>;
+  } else if (plan.status === "active" && plan.days_left !== null && plan.days_left <= 5) {
+    cls = "amber";
+    text = <>Your subscription renews on {ends} ({plan.days_left} day{plan.days_left === 1 ? "" : "s"} left).</>;
+  }
+  if (!text) return null;
+  return <div className={`plan-banner ${cls}`}>{text}</div>;
+}
+
+function MessagingCard({ plan, onUpgrade }) {
+  if (!plan) return null;
+  const pill = (f) => {
+    if (!plan.features?.[f]) return <button className="feat-pill locked" onClick={() => onUpgrade(f)}>🔒 Upgrade</button>;
+    if (!plan.smsReady) return <span className="feat-pill wait" title="Ask Sonkhela to connect your Africa's Talking account">Needs SMS account</span>;
+    return <span className="feat-pill on">{f === "custom_messaging" ? "Available" : "On"}</span>;
+  };
+  return (
+    <div className="card" style={{padding:"1rem 1.15rem"}}>
+      <div className="card-title" style={{marginBottom:"0.6rem"}}>📨 Messaging{plan.package && !plan.isSonkhela ? <span style={{fontFamily:"'Nunito',sans-serif",fontSize:"0.75rem",color:"var(--muted)",fontWeight:700,marginLeft:8}}>Your package: {plan.package.name}</span> : null}</div>
+      {Object.entries(FEATURE_INFO).map(([f, info]) => (
+        <div key={f} className={`feat-row ${plan.features?.[f] ? "" : "is-locked"}`}>
+          <div className="feat-icon">{info.icon}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div className="feat-name">{info.name}</div>
+            <div className="feat-desc">{info.desc}</div>
+          </div>
+          {pill(f)}
+        </div>
+      ))}
+      {!plan.isSonkhela && !plan.smsReady && Object.values(plan.features || {}).some(Boolean) && (
+        <div className="feat-note">To switch these on, Sonkhela connects your own Africa's Talking account, so texts show your name and use your airtime. Contact {plan.contact?.name}{plan.contact?.phone ? ` on ${plan.contact.phone}` : ""}.</div>
+      )}
+    </div>
+  );
+}
+
+function UpgradeModal({ plan, feature, close }) {
+  const info = FEATURE_INFO[feature];
+  const pkg = (plan?.packages || []).filter(p => p[FEATURE_COL[feature]]).sort((a, b) => Number(a.monthly_price) - Number(b.monthly_price))[0];
+  const contact = [plan?.contact?.phone, plan?.contact?.email].filter(Boolean);
+  return (
+    <div className="modal-overlay" onClick={close}>
+      <div className="modal" style={{maxWidth:420}} onClick={e => e.stopPropagation()}>
+        <div className="modal-head"><div className="modal-title">🔒 {info?.name}</div><button className="modal-close" onClick={close}>✕</button></div>
+        <div className="modal-body">
+          <p style={{color:"var(--muted)",fontSize:"0.9rem",lineHeight:1.6,marginBottom:"1rem"}}>{info?.desc}</p>
+          {pkg ? (
+            <div className="upgrade-box">Included in <b>{pkg.name}</b>{Number(pkg.monthly_price) > 0 ? <> for <b>{fmt(pkg.monthly_price)}</b> a month</> : null}.</div>
+          ) : null}
+          <p style={{fontSize:"0.88rem",marginTop:"1rem"}}>To upgrade, contact <b>{plan?.contact?.name}</b>{contact.length ? <> on <b>{contact.join(" or ")}</b></> : null}.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SmsModal({ loan, close, showToast }) {
+  const first = (loan.client_name || "").split(" ")[0];
+  const [msg, setMsg] = useState(`Hi ${first}, `);
+  const [sending, setSending] = useState(false);
+  const send = async () => {
+    setSending(true);
+    const r = await authFetch("/api/send-sms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ loanId: loan.id, message: msg }) });
+    const d = await r.json().catch(() => ({}));
+    setSending(false);
+    if (!r.ok) { showToast(d.error || "SMS failed.", "error"); return; }
+    showToast(`✓ SMS sent to ${loan.client_name}`);
+    close();
+  };
+  return (
+    <div className="modal-overlay" onClick={close}>
+      <div className="modal" style={{maxWidth:460}} onClick={e => e.stopPropagation()}>
+        <div className="modal-head"><div className="modal-title">📱 SMS to {loan.client_name}</div><button className="modal-close" onClick={close}>✕</button></div>
+        <div className="modal-body">
+          <div style={{fontSize:"0.8rem",color:"var(--muted)",marginBottom:6}}>To {loan.client_phone}</div>
+          <textarea rows={5} maxLength={459} value={msg} onChange={e => setMsg(e.target.value)} style={{width:"100%",padding:"10px 12px",border:"1px solid var(--border)",borderRadius:9,fontFamily:"'Nunito',sans-serif",fontSize:"0.9rem",background:"var(--white)",color:"var(--ink)"}}/>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10}}>
+            <span style={{fontSize:"0.75rem",color:"var(--muted)"}}>{msg.length}/459 · {Math.max(1, Math.ceil(msg.length / 153))} SMS</span>
+            <button className="btn btn-green btn-sm" disabled={sending || !msg.trim()} onClick={send}>{sending ? "Sending…" : "Send SMS"}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1142,7 +1273,7 @@ function RecordsPage({ settled, setSettled, showToast }) {
 
 
 // ── Notifications Page ─────────────────────────────────────────────────────────
-function NotifSection({ title, color, borderColor, loans, showToast }) {
+function NotifSection({ title, color, borderColor, loans, showToast, plan, onSms, onUpgrade }) {
   const loanFont = "'Lora',serif";
   return (
     <div className="card" style={{borderTop:`3px solid ${borderColor}`}}>
@@ -1165,7 +1296,14 @@ function NotifSection({ title, color, borderColor, loans, showToast }) {
                   <td style={{fontSize:"0.78rem",color:"var(--muted)"}}>{loan.client_phone||"—"}</td>
                   <td style={{fontWeight:700}}>{fmt(loan.amount)}</td>
                   <td style={{fontWeight:800,color}}>{fmtDate(loan.due_date)}</td>
-                  <td><CopyLinkBtn loanId={loan.id} showToast={showToast}/></td>
+                  <td style={{whiteSpace:"nowrap"}}>
+                    <CopyLinkBtn loanId={loan.id} showToast={showToast}/>{" "}
+                    {plan && (plan.features?.custom_messaging
+                      ? <button className="btn btn-link btn-xs" disabled={!plan.smsReady || !plan.canWrite || !loan.client_phone}
+                          title={!plan.smsReady ? "SMS account not connected yet" : !loan.client_phone ? "No phone number" : "Send an SMS"}
+                          onClick={() => onSms(loan)}>📱 SMS</button>
+                      : <button className="btn btn-link btn-xs locked-btn" onClick={() => onUpgrade("custom_messaging")}>🔒 SMS</button>)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1176,7 +1314,9 @@ function NotifSection({ title, color, borderColor, loans, showToast }) {
   );
 }
 
-function NotificationsPage({ loans, showToast }) {
+function NotificationsPage({ loans, showToast, plan }) {
+  const [upgrade, setUpgrade] = useState(null); // feature the user tapped while locked
+  const [smsLoan, setSmsLoan] = useState(null); // loan being texted
   const now = new Date();
   const in7 = new Date(now.getTime() + 7*86400000);
   const in3 = new Date(now.getTime() + 3*86400000);
@@ -1208,10 +1348,13 @@ function NotificationsPage({ loans, showToast }) {
           <div className="stat-sub">within 7 days</div>
         </div>
       </div>
-      <NotifSection title="🚨 Overdue Loans" color="#c0392b" borderColor="#c0392b" loans={overdueLoans} showToast={showToast}/>
-      <NotifSection title="⏰ Due Today" color="#d97706" borderColor="#d97706" loans={dueTodayLoans} showToast={showToast}/>
-      <NotifSection title="⚠️ Due in 1–3 Days" color="#d97706" borderColor="#f59e0b" loans={due3Loans} showToast={showToast}/>
-      <NotifSection title="📅 Due in 4–7 Days" color="#2563eb" borderColor="#2563eb" loans={due7Loans} showToast={showToast}/>
+      <MessagingCard plan={plan} onUpgrade={setUpgrade}/>
+      {upgrade && <UpgradeModal plan={plan} feature={upgrade} close={() => setUpgrade(null)}/>}
+      {smsLoan && <SmsModal loan={smsLoan} close={() => setSmsLoan(null)} showToast={showToast}/>}
+      <NotifSection title="🚨 Overdue Loans" color="#c0392b" borderColor="#c0392b" loans={overdueLoans} showToast={showToast} plan={plan} onSms={setSmsLoan} onUpgrade={setUpgrade}/>
+      <NotifSection title="⏰ Due Today" color="#d97706" borderColor="#d97706" loans={dueTodayLoans} showToast={showToast} plan={plan} onSms={setSmsLoan} onUpgrade={setUpgrade}/>
+      <NotifSection title="⚠️ Due in 1–3 Days" color="#d97706" borderColor="#f59e0b" loans={due3Loans} showToast={showToast} plan={plan} onSms={setSmsLoan} onUpgrade={setUpgrade}/>
+      <NotifSection title="📅 Due in 4–7 Days" color="#2563eb" borderColor="#2563eb" loans={due7Loans} showToast={showToast} plan={plan} onSms={setSmsLoan} onUpgrade={setUpgrade}/>
     </>
   );
 }
