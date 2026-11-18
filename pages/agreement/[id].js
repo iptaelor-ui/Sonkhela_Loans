@@ -155,8 +155,8 @@ export default function AgreementPage() {
     setDownloading(false);
   };
 
-  if (status === "loading") return (<><style>{PAGE_STYLES}</style><div className="loading-screen"><div className="loading-spinner"/><div className="loading-text">Loading agreement...</div></div></>);
-  if (status === "notfound") return (<><style>{PAGE_STYLES}</style><div className="error-screen"><div className="error-icon">🔍</div><div className="error-title">Agreement Not Found</div><div className="error-sub">This link may be invalid or the agreement has been removed.</div></div></>);
+  if (status === "loading") return (<><style dangerouslySetInnerHTML={{ __html: PAGE_STYLES }}/><div className="loading-screen"><div className="loading-spinner"/><div className="loading-text">Loading agreement...</div></div></>);
+  if (status === "notfound") return (<><style dangerouslySetInnerHTML={{ __html: PAGE_STYLES }}/><div className="error-screen"><div className="error-icon">🔍</div><div className="error-title">Agreement Not Found</div><div className="error-sub">This link may be invalid or the agreement has been removed.</div></div></>);
 
   const calc = calcLoan(loan.amount, loan.interest_rate, loan.repayment);
   const over = isOverdue(loan);
@@ -165,7 +165,7 @@ export default function AgreementPage() {
   const instLabel = installmentInfo(loan).label;
 
   return (
-    <><style>{PAGE_STYLES}</style>
+    <><style dangerouslySetInnerHTML={{ __html: PAGE_STYLES }}/>
     <div className="agr-page">
 
       <div className="dl-bar">
