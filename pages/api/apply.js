@@ -5,6 +5,7 @@ import crypto from "crypto";
 import nodemailer from "nodemailer";
 import { serviceClient } from "../../lib/serverAuth";
 import { resolvePortal } from "../../lib/portal";
+import { makeCode } from "../../lib/codes";
 
 export const config = { api: { bodyParser: { sizeLimit: "4mb" } } };
 
@@ -70,26 +71,35 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "One of the photos could not be uploaded. Please try a different photo." });
   }
 
+  // The business's own numbering: RTC-APP-2026-000001, 000002, ...
+  const code = t.code || makeCode(t.business_name);
+  const prefix = `${code}-APP-${new Date().getFullYear()}-`;
+  const { count: soFar } = await svc
+    .from("applications")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", t.id)
+    .like("app_ref", `${prefix}%`);
+
   const id = crypto.randomUUID();
-  const { error } = await svc.from("applications").insert({
-    id,
-    tenant_id: t.id,
-    full_name, email: email || null, phone, nrc_number,
-    country: "Zambia",
-    loan_type, loan_amount, repayment_period,
-    collateral_description: collateral_description || null,
-    collateral_images, nrc_front, nrc_back,
-  });
+  let application_number = null, error = null;
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    application_number = prefix + String((soFar || 0) + attempt).padStart(6, "0");
+    ({ error } = await svc.from("applications").insert({
+      id,
+      tenant_id: t.id,
+      app_ref: application_number,
+      full_name, email: email || null, phone, nrc_number,
+      country: "Zambia",
+      loan_type, loan_amount, repayment_period,
+      collateral_description: collateral_description || null,
+      collateral_images, nrc_front, nrc_back,
+    }));
+    if (!error || error.code !== "23505") break; // 23505: two people applied at the same moment, take the next number
+  }
   if (error) {
     console.error("apply insert failed:", error);
     return res.status(500).json({ error: "Could not submit your application. Please try again." });
   }
-
-  let application_number = null;
-  try {
-    const { data } = await svc.rpc("get_application_number", { p_id: id });
-    application_number = data || null;
-  } catch {}
 
   // Emails never block the application
   await notify({ portal, application_number, full_name, email, phone, loan_type, loan_amount, repayment_period }).catch((e) =>

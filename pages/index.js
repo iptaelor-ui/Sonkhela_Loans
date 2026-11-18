@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { supabase, fmt, fmtDate, isOverdue, genId, authFetch, AGR_STYLES } from "./shared";
+import { supabase, fmt, fmtDate, isOverdue, genId, setIdPrefix, authFetch, AGR_STYLES } from "./shared";
 import { currentPortalSlug } from "../lib/portal";
 import { SONKHELA_TENANT_ID } from "../lib/tenantIds";
 
@@ -217,8 +217,9 @@ export default function App() {
     (async () => {
       const { data: m } = await supabase.from("tenant_users").select("tenant_id, role").maybeSingle();
       if (!m) return;
-      const { data: t } = await supabase.from("tenants").select("slug").eq("id", m.tenant_id).maybeSingle();
+      const { data: t } = await supabase.from("tenants").select("slug, code").eq("id", m.tenant_id).maybeSingle();
       const isSonkhela = m.tenant_id === SONKHELA_TENANT_ID;
+      setIdPrefix(isSonkhela ? "SSL" : t?.code); // new loans get this business's prefix
       setMe({
         isPlatformAdmin: isSonkhela && m.role === "owner",
         applyUrl: isSonkhela || !t?.slug ? "https://sonkhela.com/apply" : `https://${t.slug}.sonkhela.com/apply`,
@@ -306,6 +307,7 @@ export default function App() {
     await supabase.auth.signOut();
     setLoginPassword("");
     setMe(null);
+    setIdPrefix("SSL");
     await loadBusiness();
     setScreen("login");
   };
@@ -625,7 +627,7 @@ function ApplicationsPage({ applications, setApplications, loans, setLoans, show
                   <tr key={app.id}>
                     <td>
                       <div style={{fontWeight:800}}>{app.full_name}</div>
-                      <div style={{fontSize:"0.74rem",color:"var(--muted)"}}>{app.phone}</div>
+                      <div style={{fontSize:"0.74rem",color:"var(--muted)"}}>{app.phone}{app.app_ref ? ` · ${app.app_ref}` : ""}</div>
                     </td>
                     <td>{LOAN_TYPE_NAMES[app.loan_type] || app.loan_type}</td>
                     <td style={{fontWeight:800}}>{fmt(app.loan_amount)}</td>
@@ -677,6 +679,7 @@ function AppDetailModal({ app, onClose, onApprove, onReject, onMoreInfo, showToa
         <div className="modal-body">
           <p className="section-sub">👤 Applicant</p>
           <div className="agr-grid" style={{marginBottom:"1.25rem"}}>
+            {app.app_ref && cell("Application No.", app.app_ref)}
             {cell("Full Name", app.full_name)}
             {cell("Phone", app.phone)}
             {cell("NRC Number", app.nrc_number)}

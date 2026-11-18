@@ -2,9 +2,10 @@
 // Only owners of Sonkhela (tenant #1) can use this.
 import { getTenantContext, serviceClient, SONKHELA_TENANT_ID } from "../../../lib/serverAuth";
 import { RESERVED_SLUGS, SLUG_RE, todayLusaka, addDays, daysBetween, tempPassword } from "../../../lib/platform";
+import { makeCode } from "../../../lib/codes";
 
 const TENANT_COLS =
-  "id,slug,business_name,contact_name,contact_email,contact_phone,package_id,status,subscription_start,subscription_end,at_sender_id,created_at";
+  "id,slug,code,business_name,contact_name,contact_email,contact_phone,package_id,status,subscription_start,subscription_end,at_sender_id,created_at";
 
 export default async function handler(req, res) {
   const ctx = await getTenantContext(req);
@@ -68,6 +69,15 @@ async function create(svc, req, res) {
   const { data: taken } = await svc.from("tenants").select("id").eq("slug", slug).maybeSingle();
   if (taken) return res.status(400).json({ error: `Portal name "${slug}" is already in use.` });
 
+  // Short code for numbering (RTC-APP-2026-000001); add a number if taken
+  const base = makeCode(business_name);
+  let code = base;
+  for (let i = 2; i < 100; i++) {
+    const { data: clash } = await svc.from("tenants").select("id").eq("code", code).maybeSingle();
+    if (!clash) break;
+    code = base + i;
+  }
+
   const password = tempPassword();
   const today = todayLusaka();
 
@@ -92,6 +102,7 @@ async function create(svc, req, res) {
       .from("tenants")
       .insert({
         slug,
+        code,
         business_name,
         contact_name: b.contact_name || null,
         contact_email: b.contact_email || owner_email,
