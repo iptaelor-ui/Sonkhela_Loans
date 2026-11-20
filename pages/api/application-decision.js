@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { getTenantContext, serviceClient } from "../../lib/serverAuth";
+import { loadPlan } from "../../lib/features";
 
 
 const fmtK = (n) => "K " + Number(n).toLocaleString("en", { minimumFractionDigits: 2 });
@@ -10,6 +11,9 @@ export default async function handler(req, res) {
   const ctx = await getTenantContext(req);
   if (!ctx) return res.status(401).json({ error: "Unauthorized" });
   const supabase = serviceClient();
+  // Suspended/cancelled businesses are view-only: no emails either
+  const plan = await loadPlan(supabase, ctx.tenantId);
+  if (!plan?.canWrite) return res.status(403).json({ error: "Your subscription has ended. Renew to send emails." });
   const { type, applicationId, note, loanId, agreementUrl } = req.body || {};
   if (!type || !applicationId) return res.status(400).json({ error: "type and applicationId required" });
   if (!["approved", "rejected", "more_info"].includes(type)) return res.status(400).json({ error: "Invalid type" });
