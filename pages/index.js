@@ -67,6 +67,9 @@ body.dark{--bg:#0f1a13;--white:#1a2e1f;--border:#2a4030;--muted:#7a9e85;--ink:#e
 /* ── Cards & Tables ── */
 .card{background:var(--white);border-radius:12px;border:1px solid var(--border);margin-bottom:1.5rem;box-shadow:0 1px 6px rgba(26,122,74,0.07);}
 .card-head{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.nav-locked{opacity:0.45;}
+.nav-locked::after{content:"🔒";margin-left:auto;font-size:0.75rem;}
+.mobile-nav-item.nav-locked::after{position:absolute;top:2px;right:6px;margin:0;font-size:0.6rem;}
 .plan-banner{margin:1rem 1.5rem 0;padding:0.75rem 1rem;border-radius:10px;font-size:0.85rem;font-weight:700;line-height:1.5;border:1px solid;}
 .plan-banner.red{background:#fdf0ee;color:#991b1b;border-color:#f3c4bd;}
 .plan-banner.amber{background:#fffbeb;color:#92400e;border-color:#fde68a;}
@@ -233,6 +236,12 @@ export default function App() {
   const [me, setMe] = useState(null);
   const [plan, setPlan] = useState(null); // package, status and features of this business
   READ_ONLY = !!plan && plan.canWrite === false;
+  // Suspended/cancelled: only the Dashboard summary; every other page shows the renew message
+  const goTo = (id) => {
+    if (READ_ONLY && id !== "dashboard") { showToast("Your subscription has ended. Renew to open this page.", "error"); return; }
+    setActivePage(id);
+  };
+  useEffect(() => { if (plan && plan.canWrite === false) setActivePage("dashboard"); }, [plan]);
   useEffect(() => {
     if (screen !== "app") return;
     (async () => {
@@ -395,7 +404,7 @@ export default function App() {
         </div>
         <nav className="sidebar-nav">
           {navItems.map(item => (
-            <button key={item.id} className={`nav-item ${activePage===item.id?"active":""}`} onClick={() => setActivePage(item.id)}>
+            <button key={item.id} className={`nav-item ${activePage===item.id?"active":""} ${READ_ONLY && item.id!=="dashboard"?"nav-locked":""}`} onClick={() => goTo(item.id)}>
               <span style={{width:20,textAlign:"center"}}>{item.icon}</span>{item.label}
               {item.badge > 0 && <span className="nav-badge">{item.badge}</span>}
             </button>
@@ -414,7 +423,7 @@ export default function App() {
       <nav className="mobile-nav">
         <div className="mobile-nav-items">
           {navItems.map(item => (
-            <button key={item.id} className={`mobile-nav-item ${activePage===item.id?"active":""}`} onClick={() => setActivePage(item.id)} style={{position:"relative"}}>
+            <button key={item.id} className={`mobile-nav-item ${activePage===item.id?"active":""} ${READ_ONLY && item.id!=="dashboard"?"nav-locked":""}`} onClick={() => goTo(item.id)} style={{position:"relative"}}>
               <span className="icon">{item.icon}</span>
               {item.label}
               {item.badge > 0 && <span className="nav-badge mobile">{item.badge}</span>}
@@ -434,7 +443,7 @@ export default function App() {
         </div>
         <PlanBanner plan={plan}/>
         <div className="page fade-up" key={activePage}>
-          {activePage==="dashboard" && <Dashboard loans={loans} settled={settled} setActivePage={setActivePage} showToast={showToast} applyUrl={me?.applyUrl} business={business}/>}
+          {activePage==="dashboard" && <Dashboard loans={loans} settled={settled} setActivePage={goTo} showToast={showToast} applyUrl={plan?.canWrite === false ? null : me?.applyUrl} business={business}/>}
           {activePage==="applications" && <ApplicationsPage applications={applications} setApplications={setApplications} loans={loans} setLoans={setLoans} showToast={showToast} applyUrl={me?.applyUrl}/>}
           {activePage==="clients" && <ClientsPage loans={loans} setLoans={setLoans} settled={settled} setSettled={setSettled} showToast={showToast} business={business}/>}
           {activePage==="records" && <RecordsPage settled={settled} setSettled={setSettled} showToast={showToast}/>}
@@ -505,7 +514,7 @@ function PlanBanner({ plan }) {
   let cls = "", text = null;
   if (plan.status === "suspended" || plan.status === "cancelled") {
     cls = "red";
-    text = <>Your subscription has ended. You can still view your records, but adding or changing anything is paused. Contact {plan.contact?.name}{contact ? ` on ${contact}` : ""} to renew.</>;
+    text = <>Your subscription has ended. Only this summary is available until you renew: your records, applications and messaging are locked. Contact {plan.contact?.name}{contact ? ` on ${contact}` : ""} to renew. Your data is kept safe.</>;
   } else if (plan.status === "grace") {
     cls = "amber";
     text = <>Your subscription ended on {ends}. Renew within a few days to keep using the system. Contact {plan.contact?.name}{contact ? ` on ${contact}` : ""}.</>;
