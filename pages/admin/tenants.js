@@ -236,7 +236,7 @@ function TenantRow({ t, packages, busy, act, setCreds, setSetup, setSmsFor }) {
         <div className="muted small"><a href={`https://${t.slug}.sonkhela.com`} target="_blank" rel="noreferrer">{t.slug}.sonkhela.com</a> · <a href={`https://${t.slug}.sonkhela.com/apply`} target="_blank" rel="noreferrer">apply page</a> · {t.loan_count} loan{t.loan_count === 1 ? "" : "s"}</div>
         <div className="muted small">{owner?.email || "no login"}{t.contact_name ? ` · ${t.contact_name}` : ""}{t.contact_phone ? ` · ${t.contact_phone}` : ""}</div>
         <div className={`small ${t.days_left !== null && t.days_left <= 7 ? "warn" : "muted"}`}>
-          {t.status === "trial" ? "Trial" : "Paid"} until {fmtDay(t.subscription_end)}{ending ? ` (${ending})` : ""}
+          {t.status === "trial" ? "Trial" : ["suspended", "cancelled"].includes(t.status) ? "Access" : "Paid"} until {fmtDay(t.subscription_end)}{ending ? ` (${ending})` : ""}
         </div>
       </div>
 

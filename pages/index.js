@@ -232,6 +232,7 @@ export default function App() {
   // Which business the logged-in user belongs to (for the apply link and Clients button)
   const [me, setMe] = useState(null);
   const [plan, setPlan] = useState(null); // package, status and features of this business
+  READ_ONLY = !!plan && plan.canWrite === false;
   useEffect(() => {
     if (screen !== "app") return;
     (async () => {
@@ -479,6 +480,17 @@ function ShareApplyLink({ url, showToast }) {
 }
 
 // ── Subscription & feature locks ───────────────────────────────────────────────
+// View-only while the business is suspended/cancelled. The database enforces it;
+// this makes the screen say so instead of pretending a change worked.
+let READ_ONLY = false;
+const READ_ONLY_MSG = "Your subscription has ended. Renew to add or change anything.";
+const readOnly = (showToast) => { if (READ_ONLY) { showToast(READ_ONLY_MSG, "error"); return true; } return false; };
+// A refused update/delete returns no error but changes 0 rows: treat that as blocked.
+const changed = (res, showToast, failMsg) => {
+  if (res.error) { showToast(failMsg, "error"); return false; }
+  if (Array.isArray(res.data) && res.data.length === 0) { showToast(READ_ONLY_MSG, "error"); return false; }
+  return true;
+};
 const FEATURE_INFO = {
   sms_reminders:    { icon: "⏰", name: "Automatic SMS reminders", desc: "Texts borrowers 2 days before and on the due date." },
   weekly_quotes:    { icon: "💡", name: "Weekly money tips", desc: "A short financial tip by SMS to your borrowers every Friday." },
@@ -664,8 +676,9 @@ function ApplicationsPage({ applications, setApplications, loans, setLoans, show
   const counts = Object.fromEntries(APP_STATUSES.map(s => [s.id, applications.filter(a => (a.status||"pending")===s.id).length]));
 
   const updateApp = async (id, fields) => {
-    const { error } = await supabase.from("applications").update({ ...fields, reviewed_at: new Date().toISOString() }).eq("id", id);
-    if (error) { showToast("Failed to update application.", "error"); return false; }
+    if (readOnly(showToast)) return false;
+    const res = await supabase.from("applications").update({ ...fields, reviewed_at: new Date().toISOString() }).eq("id", id).select("id");
+    if (!changed(res, showToast, "Failed to update application.")) return false;
     setApplications(p => p.map(a => a.id === id ? { ...a, ...fields } : a));
     return true;
   };
@@ -726,6 +739,7 @@ function ApplicationsPage({ applications, setApplications, loans, setLoans, show
   };
 
   const finishApprove = async (loanData) => {
+    if (readOnly(showToast)) return;
     setSaving(true);
     const app = approving.app;
     const newLoan = { ...loanData, id: genId() };
@@ -1003,8 +1017,10 @@ function ClientsPage({ loans, setLoans, settled, setSettled, showToast, business
   });
 
   const deleteLoan = async (id) => {
+    if (readOnly(showToast)) return;
     if (!confirm("Delete this loan agreement permanently?")) return;
-    await supabase.from("loans").delete().eq("id", id);
+    const res = await supabase.from("loans").delete().eq("id", id).select("id");
+    if (!changed(res, showToast, "Failed to delete.")) return;
     setLoans(p => p.filter(l => l.id!==id));
     showToast("Agreement deleted.");
   };
@@ -1021,8 +1037,9 @@ function ClientsPage({ loans, setLoans, settled, setSettled, showToast, business
   };
 
   const updateStatus = async (id, status) => {
-    const { error } = await supabase.from("loans").update({ status }).eq("id", id);
-    if (error) { showToast("Failed to update status.", "error"); return; }
+    if (readOnly(showToast)) return;
+    const res = await supabase.from("loans").update({ status }).eq("id", id).select("id");
+    if (!changed(res, showToast, "Failed to update status.")) return;
     setLoans(p => p.map(l => l.id===id ? {...l,status} : l));
     if (status === "settled") {
       const loan = loans.find(l => l.id===id);
@@ -1038,10 +1055,11 @@ function ClientsPage({ loans, setLoans, settled, setSettled, showToast, business
   };
 
   const handleSave = async (data) => {
+    if (readOnly(showToast)) return;
     setSaving(true);
     if (editTarget) {
-      const { error } = await supabase.from("loans").update(data).eq("id", editTarget.id);
-      if (error) { showToast("Failed to save.","error"); setSaving(false); return; }
+      const res = await supabase.from("loans").update(data).eq("id", editTarget.id).select("id");
+      if (!changed(res, showToast, "Failed to save.")) { setSaving(false); return; }
       setLoans(p => p.map(l => l.id===editTarget.id ? {...l,...data} : l));
       showToast("Agreement updated! ✓");
     } else {
@@ -1073,7 +1091,7 @@ function ClientsPage({ loans, setLoans, settled, setSettled, showToast, business
           <h1 style={{fontFamily:"'Lora',serif",fontSize:"1.5rem",fontWeight:700,marginBottom:4}}>Clients</h1>
           <p style={{color:"var(--muted)",fontSize:"0.85rem"}}>{loans.length} agreement{loans.length!==1?"s":""} on record</p>
         </div>
-        <button className="btn btn-green" onClick={() => {setEditTarget(null);setShowModal(true);}}>+ New Agreement</button>
+        <button className="btn btn-green" onClick={() => {if (readOnly(showToast)) return; setEditTarget(null);setShowModal(true);}}>+ New Agreement</button>
       </div>
       <div style={{display:"flex",gap:"0.75rem",marginBottom:"1rem",flexWrap:"wrap"}}>
         <input style={{flex:1,minWidth:180}} placeholder="🔍 Search..." value={search} onChange={e=>setSearch(e.target.value)}/>
@@ -1255,9 +1273,10 @@ function RecordsPage({ settled, setSettled, showToast }) {
                   </td>
                   <td>
                     <button className="btn btn-red btn-xs" onClick={async () => {
+                      if (readOnly(showToast)) return;
                       if (!confirm("Delete this settled record permanently?")) return;
-                      const { error } = await supabase.from("settled_loans").delete().eq("id", loan.id);
-                      if (error) { showToast("Failed to delete.","error"); return; }
+                      const res = await supabase.from("settled_loans").delete().eq("id", loan.id).select("id");
+                      if (!changed(res, showToast, "Failed to delete.")) return;
                       setSettled(p => p.filter(r => r.id !== loan.id));
                       showToast("Record deleted.");
                     }}>✕ Delete</button>
@@ -1429,6 +1448,7 @@ function SettingsPage({ business, setBusiness, showToast }) {
   const handleSave = async () => {
     const rate = Number(f.salary_rate ?? 30);
     if (!(rate >= 0 && rate <= 100) || String(f.salary_rate ?? "30").trim() === "") { showToast("Salary share must be between 0 and 100%.","error"); return; }
+    if (readOnly(showToast)) return;
     setSaving(true);
     const { error } = await supabase.from("business").update({
       name:f.name,tagline:f.tagline,phone:f.phone,email:f.email,

@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { getTenantContext, serviceClient } from "../../lib/serverAuth";
+import { loadPlan } from "../../lib/features";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -7,6 +8,9 @@ export default async function handler(req, res) {
   const ctx = await getTenantContext(req);
   if (!ctx) return res.status(401).json({ error: "Unauthorized" });
   const supabase = serviceClient();
+  // Suspended/cancelled businesses are view-only: no emails either
+  const plan = await loadPlan(supabase, ctx.tenantId);
+  if (!plan?.canWrite) return res.status(403).json({ error: "Your subscription has ended. Renew to send emails." });
   const { loanId } = req.body;
   if (!loanId) return res.status(400).json({ error: "loanId required" });
 
