@@ -1493,9 +1493,19 @@ function SettingsPage({ business, setBusiness, showToast }) {
             <div className="form-group"><label>Address</label><input value={f.address||""} onChange={e=>set("address",e.target.value)}/></div>
             <div className="form-group">
               <label>Colour theme</label>
-              <select value={f.theme || "green"} onChange={e=>set("theme",e.target.value)}>
+              <select value={f.theme || "green"} onChange={async e => {
+                // Applies and saves straight away (no need to press Save Settings)
+                const theme = e.target.value, prev = f.theme || "green";
+                if (readOnly(showToast)) return;
+                set("theme", theme);
+                setBusiness(b => ({ ...b, theme }));
+                const res = await supabase.from("business").update({ theme }).eq("id", business.id ?? 1).select("id");
+                if (!changed(res, showToast, "Could not save the theme.")) { set("theme", prev); setBusiness(b => ({ ...b, theme: prev })); return; }
+                showToast(`Theme changed to ${THEMES[theme].label} ✓`);
+              }}>
                 {Object.entries(THEMES).map(([k,t]) => <option key={k} value={k}>{t.label}</option>)}
               </select>
+              <div style={{fontSize:"0.74rem",color:"var(--muted)",marginTop:4}}>Changes straight away for the dashboard, apply page, agreements and app icon.</div>
             </div>
             <div className="form-group">
               <label>Salary share (%)</label>
