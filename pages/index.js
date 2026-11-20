@@ -98,6 +98,19 @@ body.dark{--bg:#0f1a13;--white:#1a2e1f;--border:#2a4030;--muted:#7a9e85;--ink:#e
 .locked-btn{opacity:0.65;}
 @media(max-width:768px){.plan-banner{margin:0.75rem 1rem 0;}}
 .share-apply{padding:1rem 1.15rem;}
+.attn-card{display:flex;align-items:center;gap:0.7rem;width:100%;padding:0.8rem 1rem;margin-bottom:0.75rem;border:1px solid var(--border);border-left:4px solid #e67e22;border-radius:12px;background:var(--white);font-family:'Nunito',sans-serif;font-size:0.9rem;color:var(--ink);cursor:pointer;text-align:left;}
+.attn-card:hover{background:var(--accent);}
+.attn-icon{font-size:1.1rem;}
+.attn-text{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:0.35rem;}
+.attn-red{color:#c0392b;}
+.attn-dot{color:var(--muted);}
+.attn-go{font-weight:800;font-size:0.8rem;color:#1a7a4a;white-space:nowrap;}
+.apply-strip{display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0.6rem 0.55rem 0.9rem;margin-bottom:1.25rem;border:1px solid var(--border);border-radius:12px;background:var(--white);font-size:0.82rem;}
+.apply-strip-label{font-weight:800;white-space:nowrap;}
+.apply-strip-url{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-weight:700;}
+.apply-strip-btn{flex-shrink:0;padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--accent);color:#145f39;font-family:'Nunito',sans-serif;font-size:0.78rem;font-weight:800;cursor:pointer;text-decoration:none;}
+.apply-strip-btn:hover{background:#1a7a4a;color:#fff;border-color:#1a7a4a;}
+@media(max-width:420px){.apply-strip-url{display:none;}.apply-strip-label{flex:1;}}
 .share-apply-sub{color:var(--muted);font-size:0.8rem;margin-top:2px;}
 .share-apply-row{display:flex;gap:0.6rem;align-items:center;margin-top:0.75rem;flex-wrap:wrap;}
 .share-apply-url{flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--border);border-radius:9px;font-family:'Nunito',sans-serif;font-size:0.85rem;font-weight:700;color:var(--ink);background:var(--accent);}
@@ -223,7 +236,7 @@ textarea{resize:vertical;min-height:80px;}
   .page{padding:1rem;padding-bottom:90px;}
   .topbar{padding:0 1rem;}
 }
-@media(max-width:480px){.stats-row{grid-template-columns:1fr;}}
+@media(max-width:480px){.stats-row{grid-template-columns:1fr 1fr;gap:0.6rem;}.stat-card{padding:0.85rem 0.9rem;}.stat-label{font-size:0.6rem;letter-spacing:0.03em;}.stat-value,.stat-value.sm{font-size:1.05rem;}.stat-sub{font-size:0.66rem;}.stats-row > .stat-card:nth-child(3):last-child{grid-column:span 2;}}
 `;
 
 export default function App() {
@@ -489,7 +502,7 @@ export default function App() {
 }
 
 // Box with the business's public application link: copy, WhatsApp, or phone share sheet.
-function ShareApplyLink({ url, showToast }) {
+function ShareApplyLink({ url, showToast, compact }) {
   const [canShare, setCanShare] = useState(false);
   useEffect(() => { setCanShare(typeof navigator !== "undefined" && !!navigator.share); }, []);
   if (!url) return null;
@@ -500,6 +513,16 @@ function ShareApplyLink({ url, showToast }) {
     else window.prompt("Copy this link:", url);
   };
   const share = () => navigator.share({ title: "Apply for a loan", text, url }).catch(() => {});
+  if (compact) return (
+    <div className="apply-strip">
+      <span className="apply-strip-label">📨 Apply link</span>
+      <span className="apply-strip-url">{url.replace(/^https?:\/\//, "")}</span>
+      <button className="apply-strip-btn" onClick={copy}>Copy</button>
+      {canShare
+        ? <button className="apply-strip-btn" onClick={share}>Share</button>
+        : <a className="apply-strip-btn" href={`https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`} target="_blank" rel="noreferrer">WhatsApp</a>}
+    </div>
+  );
   return (
     <div className="card share-apply">
       <div className="share-apply-head">
@@ -950,27 +973,20 @@ function Dashboard({ loans, settled, setActivePage, showToast, applyUrl, busines
         <p style={{color:"var(--muted)",fontSize:"0.85rem"}}>Here's what's happening with your loan portfolio today.</p>
       </div>
 
-      <ShareApplyLink url={applyUrl} showToast={showToast}/>
-
-      {/* Notification Banner */}
+      {/* Compact attention card: counts only; names live on the Alerts page */}
       {(dueSoon.length > 0 || overdueList.length > 0) && (
-        <div className="notif-banner">
-          <div className="notif-icon">🔔</div>
-          <div className="notif-text">
-            <div className="notif-title">
-              {overdueList.length > 0 ? `${overdueList.length} overdue loan${overdueList.length>1?"s":""}` : ""}
-              {overdueList.length > 0 && dueSoon.length > 0 ? " · " : ""}
-              {dueSoon.length > 0 ? `${dueSoon.length} due within 7 days` : ""}
-            </div>
-            <div className="notif-items">
-              {[...overdueList, ...dueSoon].slice(0,5).map(l => (
-                <span key={l.id} className="notif-chip">{l.client_name} — {fmtDate(l.due_date)}</span>
-              ))}
-              {[...overdueList,...dueSoon].length > 5 && <span className="notif-chip">+{[...overdueList,...dueSoon].length-5} more</span>}
-            </div>
-          </div>
-        </div>
+        <button className="attn-card" onClick={() => setActivePage("notifications")}>
+          <span className="attn-icon">🔔</span>
+          <span className="attn-text">
+            {overdueList.length > 0 && <b className="attn-red">{overdueList.length} overdue</b>}
+            {overdueList.length > 0 && dueSoon.length > 0 && <span className="attn-dot">·</span>}
+            {dueSoon.length > 0 && <b>{dueSoon.length} due this week</b>}
+          </span>
+          <span className="attn-go">View →</span>
+        </button>
       )}
+
+      <ShareApplyLink url={applyUrl} showToast={showToast} compact/>
 
       <div className="stats-row">
         <div className="stat-card">
