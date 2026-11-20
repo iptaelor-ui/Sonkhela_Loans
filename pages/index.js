@@ -33,6 +33,15 @@ body.dark{--bg:#0f1a13;--white:#1a2e1f;--border:#2a4030;--muted:#7a9e85;--ink:#e
 .mobile-nav-item{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 12px;border:none;background:transparent;cursor:pointer;color:rgba(255,255,255,0.55);font-family:'Nunito',sans-serif;font-size:0.62rem;font-weight:800;text-transform:uppercase;letter-spacing:0.04em;border-radius:8px;transition:all 0.18s;}
 .mobile-nav-item.active{color:#fff;background:rgba(255,255,255,0.15);}
 .mobile-nav-item .icon{font-size:1.2rem;}
+.mobile-nav-items .mobile-nav-item{flex:1;min-width:0;padding:6px 1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:none;letter-spacing:0;font-size:0.68rem;}
+@media(max-width:380px){.mobile-nav-items .mobile-nav-item{font-size:0.58rem;}}
+.more-overlay{position:fixed;inset:0;background:rgba(13,31,20,0.45);z-index:190;display:flex;align-items:flex-end;}
+.more-sheet{width:100%;background:var(--white);border-radius:18px 18px 0 0;padding:8px 12px calc(84px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:4px;box-shadow:0 -8px 30px rgba(13,31,20,0.2);}
+.more-handle{width:40px;height:4px;border-radius:4px;background:var(--border);margin:4px auto 8px;}
+.more-item{display:flex;align-items:center;gap:12px;width:100%;padding:13px 14px;border:none;border-radius:12px;background:transparent;font-family:'Nunito',sans-serif;font-size:0.95rem;font-weight:800;color:var(--ink);text-decoration:none;cursor:pointer;text-align:left;position:relative;}
+.more-item:hover,.more-item.active{background:var(--accent);color:#145f39;}
+.more-icon{font-size:1.15rem;width:26px;text-align:center;}
+.more-item.nav-locked::after{margin-left:auto;}
 
 /* ── Main ── */
 .main{flex:1;overflow-y:auto;min-width:0;}
@@ -346,6 +355,8 @@ export default function App() {
 
   const pendingApps = applications.filter(a => a.status === "pending" || a.status === "under_review").length;
 
+  const [moreOpen, setMoreOpen] = useState(false);
+  const MOBILE_MAIN = ["dashboard", "applications", "clients", "notifications"];
   const navItems = [
     { id:"dashboard", icon:"📊", label:"Dashboard" },
     { id:"applications", icon:"📥", label:"Applications", badge: pendingApps },
@@ -420,15 +431,36 @@ export default function App() {
       </aside>
 
       {/* Mobile Bottom Nav */}
+      {/* Phone menu: 4 main pages + More (Records, Summary, Settings, dark mode, logout) */}
+      {moreOpen && (
+        <div className="more-overlay" onClick={() => setMoreOpen(false)}>
+          <div className="more-sheet" onClick={e => e.stopPropagation()}>
+            <div className="more-handle"/>
+            {navItems.filter(i => !MOBILE_MAIN.includes(i.id)).map(item => (
+              <button key={item.id} className={`more-item ${activePage===item.id?"active":""} ${READ_ONLY && item.id!=="dashboard"?"nav-locked":""}`}
+                onClick={() => { setMoreOpen(false); goTo(item.id); }}>
+                <span className="more-icon">{item.icon}</span>{item.label}
+              </button>
+            ))}
+            {me?.isPlatformAdmin && <a className="more-item" href="/admin/tenants"><span className="more-icon">🏢</span>Client businesses</a>}
+            <button className="more-item" onClick={() => setDarkMode(d => !d)}><span className="more-icon">{darkMode ? "☀️" : "🌙"}</span>{darkMode ? "Light Mode" : "Dark Mode"}</button>
+            <button className="more-item" onClick={() => { setMoreOpen(false); handleLogout(); }}><span className="more-icon">🔒</span>Logout</button>
+          </div>
+        </div>
+      )}
       <nav className="mobile-nav">
         <div className="mobile-nav-items">
-          {navItems.map(item => (
-            <button key={item.id} className={`mobile-nav-item ${activePage===item.id?"active":""} ${READ_ONLY && item.id!=="dashboard"?"nav-locked":""}`} onClick={() => goTo(item.id)} style={{position:"relative"}}>
+          {navItems.filter(i => MOBILE_MAIN.includes(i.id)).map(item => (
+            <button key={item.id} className={`mobile-nav-item ${activePage===item.id?"active":""} ${READ_ONLY && item.id!=="dashboard"?"nav-locked":""}`} onClick={() => { setMoreOpen(false); goTo(item.id); }} style={{position:"relative"}}>
               <span className="icon">{item.icon}</span>
               {item.label}
               {item.badge > 0 && <span className="nav-badge mobile">{item.badge}</span>}
             </button>
           ))}
+          <button className={`mobile-nav-item ${moreOpen || !MOBILE_MAIN.includes(activePage) ? "active" : ""}`} onClick={() => setMoreOpen(o => !o)} style={{position:"relative"}}>
+            <span className="icon">☰</span>
+            More
+          </button>
         </div>
       </nav>
 
