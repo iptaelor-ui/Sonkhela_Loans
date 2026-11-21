@@ -97,6 +97,9 @@ body.dark{--bg:#0f1a13;--white:#1a2e1f;--border:#2a4030;--muted:#7a9e85;--ink:#e
 .upgrade-box{background:#ede9fe;color:#4c1d95;border-radius:10px;padding:12px 14px;font-size:0.9rem;}
 .locked-btn{opacity:0.65;}
 @media(max-width:768px){.plan-banner{margin:0.75rem 1rem 0;}}
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start;}
+.settings-grid > *{min-width:0;}
+@media(max-width:900px){.settings-grid{grid-template-columns:1fr;gap:1rem;}}
 .share-apply{padding:1rem 1.15rem;}
 .attn-card{display:flex;align-items:center;gap:0.7rem;width:100%;padding:0.8rem 1rem;margin-bottom:0.75rem;border:1px solid var(--border);border-left:4px solid #e67e22;border-radius:12px;background:var(--white);font-family:'Nunito',sans-serif;font-size:0.9rem;color:var(--ink);cursor:pointer;text-align:left;}
 .attn-card:hover{background:var(--accent);}
@@ -1522,7 +1525,7 @@ function SettingsPage({ business, setBusiness, showToast }) {
         <h1 style={{fontFamily:"'Lora',serif",fontSize:"1.5rem",fontWeight:700,marginBottom:4}}>Settings</h1>
         <p style={{color:"var(--muted)",fontSize:"0.85rem"}}>Manage your profile, signature and security</p>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1.5rem"}}>
+      <div className="settings-grid">
         <div className="card">
           <div className="card-head"><div className="card-title">🏢 Business Profile</div></div>
           <div className="card-body" style={{display:"flex",flexDirection:"column",gap:"1rem"}}>
