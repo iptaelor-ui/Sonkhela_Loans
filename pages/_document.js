@@ -6,8 +6,8 @@ export default function Document() {
       <Head>
         <link rel="manifest" href="/api/manifest" />
         <meta name="theme-color" content="#145f39" />
-        <link rel="icon" href="/api/app-icon?size=64" type="image/png" />
-        <link rel="apple-touch-icon" href="/api/app-icon?size=180" />
+        <link rel="icon" href="/api/app-icon?v=2&size=64" type="image/png" />
+        <link rel="apple-touch-icon" href="/api/app-icon?v=2&size=180" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
