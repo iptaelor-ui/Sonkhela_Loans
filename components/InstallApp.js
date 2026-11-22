@@ -69,7 +69,7 @@ export default function InstallApp() {
       <div style={S.card}>
         <div style={S.row}>
           <div style={S.icon}>
-            <img src="/api/app-icon?size=96" alt="" width="44" height="44" style={{ borderRadius: 10, display: "block" }} />
+            <img src="/api/app-icon?v=2&size=96" alt="" width="44" height="44" style={{ borderRadius: 10, display: "block" }} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={S.title}>Get the app</div>
