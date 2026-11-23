@@ -681,7 +681,7 @@ function CopyLinkBtn({ loanId, showToast }) {
   return (
     <span className="link-btns">
       <button className="btn btn-link btn-xs" onClick={() => { navigator.clipboard.writeText(url()).then(() => showToast("✓ Link copied!")); }}>🔗 Copy</button>
-      <a className="btn btn-link btn-xs" href={`/agreement/${loanId}`} target="_blank" rel="noopener" title="Open the agreement">👁 View</a>
+      <a className="btn btn-link btn-xs" href={`/agreement/${loanId}`} target="_blank" rel="noopener" title="Open the agreement">📄 Open</a>
     </span>
   );
 }
