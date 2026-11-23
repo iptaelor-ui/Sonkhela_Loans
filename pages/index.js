@@ -100,6 +100,8 @@ body.dark{--bg:#0f1a13;--white:#1a2e1f;--border:#2a4030;--muted:#7a9e85;--ink:#e
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start;}
 .settings-grid > *{min-width:0;}
 @media(max-width:900px){.settings-grid{grid-template-columns:1fr;gap:1rem;}}
+.link-btns{display:inline-flex;flex-direction:column;align-items:stretch;gap:4px;vertical-align:middle;}
+.link-btns .btn{justify-content:center;text-decoration:none;}
 .share-apply{padding:1rem 1.15rem;}
 .attn-card{display:flex;align-items:center;gap:0.7rem;width:100%;padding:0.8rem 1rem;margin-bottom:0.75rem;border:1px solid var(--border);border-left:4px solid #e67e22;border-radius:12px;background:var(--white);font-family:'Nunito',sans-serif;font-size:0.9rem;color:var(--ink);cursor:pointer;text-align:left;}
 .attn-card:hover{background:var(--accent);}
@@ -672,8 +674,16 @@ const salaryRate = (b) => {
   return b?.salary_rate != null && r >= 0 && r <= 100 ? r : 30;
 };
 
+// Agreement link: Copy (to send to the borrower) and View (opens the agreement
+// in a new tab; inside the installed app it opens over the app with a close button)
 function CopyLinkBtn({ loanId, showToast }) {
-  return <button className="btn btn-link btn-xs" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/agreement/${loanId}`).then(() => showToast("✓ Link copied!")); }}>🔗 Copy</button>;
+  const url = () => `${window.location.origin}/agreement/${loanId}`;
+  return (
+    <span className="link-btns">
+      <button className="btn btn-link btn-xs" onClick={() => { navigator.clipboard.writeText(url()).then(() => showToast("✓ Link copied!")); }}>🔗 Copy</button>
+      <a className="btn btn-link btn-xs" href={`/agreement/${loanId}`} target="_blank" rel="noopener" title="Open the agreement">📄 Open</a>
+    </span>
+  );
 }
 
 // ── Applications (from website) ────────────────────────────────────────────────
