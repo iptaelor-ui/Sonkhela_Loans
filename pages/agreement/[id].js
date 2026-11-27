@@ -134,6 +134,8 @@ export default function AgreementPage() {
     const { data: ok, error } = await supabase.rpc("sign_agreement", { p_id: id, p_signature: sigData });
     if (error || !ok) { setSigToast("Failed to save signature. Please try again."); setSubmittingSig(false); return; }
     setLoan(p => ({ ...p, client_signature: sigData }));
+    // Save the signed agreement to the lender's Google Drive (if connected)
+    fetch("/api/drive/sync-signed", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }).catch(() => {});
     setSigSaved(true);
     setSigToast("✓ Signature submitted successfully!");
     setTimeout(() => setSigToast(""), 4000);
@@ -222,7 +224,7 @@ export default function AgreementPage() {
             {loan.collateral_photo && (
               <div className="agr-cell full">
                 <div className="agr-cell-label">Collateral Photo</div>
-                <img src={loan.collateral_photo} alt="collateral" style={{maxWidth:"100%",maxHeight:200,objectFit:"contain",borderRadius:8,marginTop:6,display:"block"}}/>
+                <img src={loan.collateral_photo.startsWith("drive:") ? `/api/loan-file?loan=${encodeURIComponent(loan.id)}` : loan.collateral_photo} alt="collateral" style={{maxWidth:"100%",maxHeight:200,objectFit:"contain",borderRadius:8,marginTop:6,display:"block"}}/>
               </div>
             )}
           </div>
