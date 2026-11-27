@@ -97,6 +97,8 @@ body.dark{--bg:#0f1a13;--white:#1a2e1f;--border:#2a4030;--muted:#7a9e85;--ink:#e
 .upgrade-box{background:#ede9fe;color:#4c1d95;border-radius:10px;padding:12px 14px;font-size:0.9rem;}
 .locked-btn{opacity:0.65;}
 @media(max-width:768px){.plan-banner{margin:0.75rem 1rem 0;}}
+.drive-status{font-size:0.88rem;padding:8px 12px;border-radius:10px;background:var(--accent);}
+.drive-note{font-size:0.82rem;color:var(--muted);line-height:1.5;margin:0;}
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start;}
 .settings-grid > *{min-width:0;}
 @media(max-width:900px){.settings-grid{grid-template-columns:1fr;gap:1rem;}}
@@ -674,6 +676,84 @@ const salaryRate = (b) => {
   return b?.salary_rate != null && r >= 0 && r <= 100 ? r : 30;
 };
 
+// ── Google Drive ───────────────────────────────────────────────────────────────
+// Keep the loan's Drive folder up to date (runs in the background; nothing happens if Drive isn't connected)
+const syncDrive = (loanId, force = false) =>
+  authFetch("/api/drive/sync-loan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ loanId, force }) }).catch(() => {});
+// A collateral photo moved to Drive is stored as "drive:<id>" and shown through our server
+const photoSrc = (v, loanId) => (typeof v === "string" && v.startsWith("drive:") ? `/api/loan-file?loan=${encodeURIComponent(loanId || "")}` : v);
+
+function DriveCard({ showToast }) {
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [progress, setProgress] = useState("");
+  const load = () => authFetch("/api/drive/status").then(r => r.ok ? r.json() : null).then(setSt).catch(() => {});
+  useEffect(() => {
+    load();
+    const q = new URLSearchParams(window.location.search).get("drive");
+    if (q) {
+      const msg = { connected: "✓ Google Drive connected", cancelled: "Google Drive connection cancelled", error: "Couldn't connect Google Drive. Please try again.", "no-refresh": "Google didn't give full access. Please try Connect again." }[q];
+      if (msg) showToast(msg, q === "connected" ? "ok" : "error");
+      const u = new URL(window.location.href); u.searchParams.delete("drive"); window.history.replaceState(null, "", u.toString());
+    }
+  }, []);
+  const connect = async () => {
+    setBusy("connect");
+    const r = await authFetch("/api/google/connect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ returnTo: window.location.origin + "/" }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { showToast(d.error || "Couldn't start Google sign-in.", "error"); setBusy(""); return; }
+    window.location.href = d.url;
+  };
+  const disconnect = async () => {
+    if (!confirm("Stop saving to Google Drive? Files already in Drive stay there.")) return;
+    setBusy("disconnect");
+    await authFetch("/api/drive/disconnect", { method: "POST" });
+    setBusy(""); showToast("Google Drive disconnected"); load();
+  };
+  const moveAll = async () => {
+    setBusy("move");
+    let total = 0;
+    for (let round = 0; round < 40; round++) {
+      setProgress(`Moving… ${total} done`);
+      const r = await authFetch("/api/drive/sync-all", { method: "POST" });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { showToast(d.error || "Move failed.", "error"); break; }
+      total += (d.applications || 0) + (d.loans || 0);
+      if (d.errors?.length) { showToast(d.errors[0], "error"); break; }
+      if (!d.left) break;
+    }
+    setProgress(""); setBusy(""); showToast(`✓ ${total} item${total === 1 ? "" : "s"} moved to Google Drive`); load();
+  };
+  if (!st) return null;
+  return (
+    <div className="card">
+      <div className="card-head"><div className="card-title">🗂️ Google Drive</div></div>
+      <div className="card-body" style={{display:"flex",flexDirection:"column",gap:"0.75rem"}}>
+        {!st.configured ? (
+          <p className="drive-note">Google Drive storage isn't switched on yet. Contact Sonkhela.</p>
+        ) : st.connected ? (
+          <>
+            <div className="drive-status on">✓ Connected to <b>{st.email}</b></div>
+            <p className="drive-note">New applications and loans are saved in your Google Drive: one folder per loan with the agreement PDF, collateral photo, NRC and signature.</p>
+            {st.folder && <a className="btn btn-outline btn-sm" href={st.folder} target="_blank" rel="noreferrer" style={{textDecoration:"none",justifyContent:"center"}}>📁 Open folder in Google Drive</a>}
+            {st.pending > 0 && st.canManage && (
+              <button className="btn btn-green btn-sm" disabled={!!busy} onClick={moveAll}>{busy === "move" ? progress : `Move ${st.pending} existing item${st.pending === 1 ? "" : "s"} to Drive`}</button>
+            )}
+            {st.canManage && <button className="btn btn-ghost btn-sm" disabled={!!busy} onClick={disconnect}>Disconnect</button>}
+          </>
+        ) : (
+          <>
+            <p className="drive-note">Save application photos and a folder for every loan (agreement PDF, collateral photo, NRC, signature) in your own Google Drive instead of the system's storage.</p>
+            {st.canManage
+              ? <button className="btn btn-green btn-sm" disabled={!!busy} onClick={connect}>{busy === "connect" ? "Opening Google…" : "Connect Google Drive"}</button>
+              : <p className="drive-note">Ask the business owner to connect Google Drive.</p>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Agreement link: Copy (to send to the borrower) and View (opens the agreement
 // in a new tab; inside the installed app it opens over the app with a close button)
 function CopyLinkBtn({ loanId, showToast }) {
@@ -824,6 +904,7 @@ function ApplicationsPage({ applications, setApplications, loans, setLoans, show
     if (error) { showToast("Failed to create loan agreement.", "error"); setSaving(false); return; }
     setLoans(p => [newLoan, ...p]);
     if (!(await updateApp(app.id, { status: "approved", loan_id: newLoan.id }))) { setSaving(false); return; }
+    syncDrive(newLoan.id);
     setSaving(false);
     setApproving(null);
     showToast("Approved! Agreement " + newLoan.id + " created ✓");
@@ -1131,12 +1212,14 @@ function ClientsPage({ loans, setLoans, settled, setSettled, showToast, business
       const res = await supabase.from("loans").update(data).eq("id", editTarget.id).select("id");
       if (!changed(res, showToast, "Failed to save.")) { setSaving(false); return; }
       setLoans(p => p.map(l => l.id===editTarget.id ? {...l,...data} : l));
+      syncDrive(editTarget.id, true);
       showToast("Agreement updated! ✓");
     } else {
       const newLoan = {...data, id:genId()};
       const { error } = await supabase.from("loans").insert(newLoan);
       if (error) { showToast("Failed to create.","error"); setSaving(false); return; }
       setLoans(p => [newLoan,...p]);
+      syncDrive(newLoan.id);
       showToast("Agreement created! ✓");
     }
     setSaving(false); setShowModal(false);
@@ -1269,11 +1352,12 @@ function LoanModal({ loan, onClose, onSave, saving }) {
             <div className="form-group full">
               <label>Collateral Photo <span style={{color:"var(--muted)",fontWeight:400,textTransform:"none",fontSize:"0.68rem"}}>(optional)</span></label>
               <div className="upload-area" onClick={() => document.getElementById("collateralUpload").click()}>
-                {f.collateral_photo ? <img src={f.collateral_photo} alt="collateral" style={{maxHeight:80,maxWidth:"100%",objectFit:"contain",display:"block",margin:"0 auto 6px"}}/> : <div style={{fontSize:"1.5rem",marginBottom:6}}>📷</div>}
+                {f.collateral_photo ? <img src={photoSrc(f.collateral_photo, f.id)} alt="collateral" style={{maxHeight:80,maxWidth:"100%",objectFit:"contain",display:"block",margin:"0 auto 6px"}}/> : <div style={{fontSize:"1.5rem",marginBottom:6}}>📷</div>}
                 <div style={{fontSize:"0.76rem",color:"var(--muted)",fontWeight:700}}>Click to upload photo of collateral item</div>
               </div>
               <input id="collateralUpload" type="file" accept="image/*" style={{display:"none"}} onChange={uploadCollateral}/>
               {f.collateral_photo && <button className="btn btn-ghost btn-xs" style={{marginTop:6}} onClick={()=>set("collateral_photo",null)}>Remove Photo</button>}
+              {f.drive_folder_id && <a className="btn btn-outline btn-xs" style={{marginTop:6,marginLeft:6,textDecoration:"none"}} href={`https://drive.google.com/drive/folders/${f.drive_folder_id}`} target="_blank" rel="noreferrer">📁 Open in Google Drive</a>}
             </div>
           </div>
           <p className="section-sub">📋 Terms & Conditions</p>
@@ -1587,6 +1671,7 @@ function SettingsPage({ business, setBusiness, showToast }) {
               {f.signature&&<button className="btn btn-ghost btn-sm" style={{marginTop:"0.75rem",width:"100%"}} onClick={()=>set("signature",null)}>Remove</button>}
             </div>
           </div>
+          <DriveCard showToast={showToast}/>
           <div className="card">
             <div className="card-head"><div className="card-title">🔐 Security</div></div>
             <div className="card-body">

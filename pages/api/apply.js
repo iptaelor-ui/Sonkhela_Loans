@@ -6,8 +6,9 @@ import nodemailer from "nodemailer";
 import { serviceClient } from "../../lib/serverAuth";
 import { resolvePortal } from "../../lib/portal";
 import { makeCode } from "../../lib/codes";
+import { moveApplication } from "../../lib/driveSync";
 
-export const config = { api: { bodyParser: { sizeLimit: "4mb" } } };
+export const config = { api: { bodyParser: { sizeLimit: "4mb" } }, maxDuration: 60 };
 
 const LOAN_NAMES = {
   collateral: "Collateral Backed Loan",
@@ -100,6 +101,9 @@ export default async function handler(req, res) {
     console.error("apply insert failed:", error);
     return res.status(500).json({ error: "Could not submit your application. Please try again." });
   }
+
+  // Photos straight into the business's Google Drive (if connected); never blocks the application
+  try { await moveApplication(svc, id); } catch (e) { console.error("apply drive move:", e.message); }
 
   // Emails never block the application
   await notify({ portal, application_number, full_name, email, phone, loan_type, loan_amount, repayment_period }).catch((e) =>
