@@ -7,6 +7,7 @@ import { serviceClient } from "../../lib/serverAuth";
 import { resolvePortal } from "../../lib/portal";
 import { makeCode } from "../../lib/codes";
 import { moveApplication } from "../../lib/driveSync";
+import { offeredTypes } from "../../lib/loanTypes";
 
 export const config = { api: { bodyParser: { sizeLimit: "4mb" } }, maxDuration: 60 };
 
@@ -56,6 +57,7 @@ export default async function handler(req, res) {
   if (!full_name || !phone || !nrc_number) return res.status(400).json({ error: "Name, phone number and NRC number are required." });
   if (email && !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: "Enter a valid email address or leave it blank." });
   if (!LOAN_NAMES[loan_type]) return res.status(400).json({ error: "Choose a loan type." });
+  if (!offeredTypes(portal.biz.loan_types).includes(loan_type)) return res.status(400).json({ error: `${portal.tenant.business_name} doesn't offer that type of loan.` });
   if (!(loan_amount > 0)) return res.status(400).json({ error: "Enter a valid loan amount." });
   if (![1, 2, 3, 4].includes(repayment_period)) return res.status(400).json({ error: "Choose a repayment period." });
 

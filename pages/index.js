@@ -3,6 +3,7 @@ import { supabase, fmt, fmtDate, isOverdue, genId, setIdPrefix, authFetch, AGR_S
 import { currentPortalSlug } from "../lib/portal";
 import { SONKHELA_TENANT_ID } from "../lib/tenantIds";
 import { applyTheme, THEMES } from "../lib/theme";
+import { LOAN_TYPES as OFFERABLE, offeredTypes } from "../lib/loanTypes";
 
 const ADMIN_STYLES = `
 ${AGR_STYLES}
@@ -99,6 +100,10 @@ body.dark{--bg:#0f1a13;--white:#1a2e1f;--border:#2a4030;--muted:#7a9e85;--ink:#e
 @media(max-width:768px){.plan-banner{margin:0.75rem 1rem 0;}}
 .drive-status{font-size:0.88rem;padding:8px 12px;border-radius:10px;background:var(--accent);}
 .drive-note{font-size:0.82rem;color:var(--muted);line-height:1.5;margin:0;}
+.loan-type-checks{display:flex;flex-wrap:wrap;gap:6px;}
+.lt-check{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--border);border-radius:20px;font-size:0.8rem;font-weight:700;color:var(--muted);cursor:pointer;text-transform:none;letter-spacing:0;}
+.lt-check.on{background:var(--accent);color:#145f39;border-color:#1a7a4a;}
+.lt-check input{accent-color:#1a7a4a;margin:0;}
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start;}
 .settings-grid > *{min-width:0;}
 @media(max-width:900px){.settings-grid{grid-template-columns:1fr;gap:1rem;}}
@@ -1607,6 +1612,7 @@ function SettingsPage({ business, setBusiness, showToast }) {
     const { error } = await supabase.from("business").update({
       name:f.name,tagline:f.tagline,phone:f.phone,email:f.email,
       address:f.address,logo:f.logo,signature:f.signature,salary_rate:rate,theme:f.theme||"green",
+      loan_types: offeredTypes(f.loan_types).length === OFFERABLE.length ? null : offeredTypes(f.loan_types),
     }).eq("id",business.id ?? 1);
     setSaving(false);
     if (error) { showToast("Failed to save.","error"); return; }
@@ -1651,6 +1657,26 @@ function SettingsPage({ business, setBusiness, showToast }) {
                 {Object.entries(THEMES).map(([k,t]) => <option key={k} value={k}>{t.label}</option>)}
               </select>
               <div style={{fontSize:"0.74rem",color:"var(--muted)",marginTop:4}}>Changes straight away for the dashboard, apply page, agreements and app icon.</div>
+            </div>
+            <div className="form-group">
+              <label>Loan types offered</label>
+              <div className="loan-type-checks">
+                {OFFERABLE.map(([v, l]) => {
+                  const on = offeredTypes(f.loan_types).includes(v);
+                  return (
+                    <label key={v} className={`lt-check ${on ? "on" : ""}`}>
+                      <input type="checkbox" checked={on} onChange={() => {
+                        const cur = offeredTypes(f.loan_types);
+                        const next = on ? cur.filter(t => t !== v) : [...cur, v];
+                        if (next.length === 0) { showToast("Keep at least one loan type.", "error"); return; }
+                        set("loan_types", next);
+                      }}/>
+                      {l}
+                    </label>
+                  );
+                })}
+              </div>
+              <div style={{fontSize:"0.74rem",color:"var(--muted)",marginTop:4}}>Only these appear on your application page. With one type, borrowers don't see a choice.</div>
             </div>
             <div className="form-group">
               <label>Salary share (%)</label>

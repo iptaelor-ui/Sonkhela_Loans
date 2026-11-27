@@ -4,14 +4,7 @@ import Head from "next/head";
 import { currentPortalSlug } from "../lib/portal";
 import { applyTheme } from "../lib/theme";
 
-const LOAN_TYPES = [
-  ["collateral", "Collateral Backed Loan"],
-  ["payslip", "Payslip Backed Loan"],
-  ["student", "Student Loan"],
-  ["marketeer", "Marketeer Loan"],
-  ["business", "Business Loan"],
-  ["white-book", "White Book Loan"],
-];
+import { LOAN_TYPES } from "../lib/loanTypes";
 
 const EMPTY = {
   fullName: "", phone: "", email: "", nrcNumber: "",
@@ -51,11 +44,16 @@ export default function Apply() {
     if (!slug) { setPortal({ loading: false, missing: true }); return; }
     fetch(`/api/portal?portal=${encodeURIComponent(slug)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((p) => setPortal({ loading: false, ...p }))
+      .then((p) => {
+        setPortal({ loading: false, ...p });
+        // start on a type this business offers
+        if (p.loanTypes?.length) setF((s) => (p.loanTypes.includes(s.loanType) ? s : { ...s, loanType: p.loanTypes[0] }));
+      })
       .catch(() => setPortal({ loading: false, missing: true }));
   }, []);
 
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  const offered = LOAN_TYPES.filter(([v]) => !portal.loanTypes || portal.loanTypes.includes(v));
   const needsCollateral = f.loanType === "collateral" || f.loanType === "white-book";
 
   async function addPhotos(key, files, multiple) {
@@ -135,9 +133,13 @@ export default function Apply() {
               <h2>The loan</h2>
               <div className="grid">
                 <Field label="Loan type *">
-                  <select value={f.loanType} onChange={(e) => set("loanType", e.target.value)}>
-                    {LOAN_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
+                  {offered.length === 1 ? (
+                    <div className="fixed-type">{offered[0][1]}</div>
+                  ) : (
+                    <select value={f.loanType} onChange={(e) => set("loanType", e.target.value)}>
+                      {offered.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  )}
                 </Field>
                 <Field label="Amount (ZMW) *"><input required type="number" min="1" inputMode="numeric" value={f.loanAmount} onChange={(e) => set("loanAmount", e.target.value)} placeholder="1500" /></Field>
                 <Field label="Repayment period *">
@@ -234,6 +236,7 @@ h2{font-size:.78rem;font-weight:800;color:#1a7a4a;text-transform:uppercase;lette
 .field{display:flex;flex-direction:column;gap:5px;font-size:.8rem;font-weight:800;color:#145f39;margin-bottom:12px}
 input,select,textarea{font:inherit;font-size:.95rem;font-weight:600;padding:11px 12px;border:1px solid #d4e8db;border-radius:10px;background:#fff;color:#0d1f14;width:100%}
 input:focus,select:focus,textarea:focus{outline:2px solid #1a7a4a33;border-color:#1a7a4a}
+.fixed-type{font-size:.95rem;font-weight:700;padding:11px 12px;border:1px solid #d4e8db;border-radius:10px;background:#f0faf4;color:#0d1f14;}
 .thumbs{display:flex;gap:8px;flex-wrap:wrap}
 .thumb{position:relative;width:84px;height:84px;border-radius:10px;overflow:hidden;border:1px solid #d4e8db}
 .thumb img{width:100%;height:100%;object-fit:cover}

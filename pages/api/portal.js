@@ -1,6 +1,7 @@
 // Public: branding for the client portal on this subdomain (login + apply pages).
 import { serviceClient } from "../../lib/serverAuth";
 import { resolvePortal } from "../../lib/portal";
+import { offeredTypes } from "../../lib/loanTypes";
 
 export default async function handler(req, res) {
   const portal = await resolvePortal(serviceClient(), req);
@@ -16,6 +17,7 @@ export default async function handler(req, res) {
     address: biz.address || "",
     logo: biz.logo || null,
     theme: biz.theme || "green",
+    loanTypes: offeredTypes(biz.loan_types),
     accepting,
   });
 }
